@@ -1,0 +1,12 @@
+bin/
+obj/
+publish/
+App_Data/
+*.db
+*.db-shm
+*.db-wal
+.vs/
+.vscode/
+*.user
+TestResults/
+logs/

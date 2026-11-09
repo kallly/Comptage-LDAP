@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comptage incident</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <span class="brand-mark" aria-hidden="true">!</span>
+      <span>Comptage incident</span>
+    </a>
+    <nav class="topnav" aria-label="Navigation principale">
+      <a href="#/" data-nav="incidents">Incidents</a>
+      <a href="#/corbeille" data-nav="trash">Corbeille</a>
+    </nav>
+    <span class="user" id="current-user" title="Utilisateur connecté"></span>
+  </header>
+
+  <main id="app" class="container" tabindex="-1">
+    <p class="muted">Chargement…</p>
+  </main>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <!-- Popup de confirmation générique -->
+  <dialog id="confirm-dialog" class="dialog">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <div id="confirm-message" class="dialog-body"></div>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn" id="confirm-cancel">Annuler</button>
+        <button value="ok" class="btn btn-primary" id="confirm-ok">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Création d'incident -->
+  <dialog id="incident-dialog" class="dialog">
+    <form id="incident-form" method="dialog">
+      <h2>Nouvel incident</h2>
+      <div class="dialog-body form-grid">
+        <label>Type
+          <select name="type" required></select>
+        </label>
+        <label>Titre
+          <input name="title" required maxlength="200" placeholder="ex. Incendie bâtiment B" autocomplete="off">
+        </label>
+        <label>Lieu / point de rassemblement <span class="muted">(optionnel)</span>
+          <input name="location" maxlength="200" placeholder="ex. Parking nord" autocomplete="off">
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button type="submit" class="btn btn-primary">Créer l'incident</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Ajout d'un visiteur -->
+  <dialog id="visitor-dialog" class="dialog">
+    <form id="visitor-form" method="dialog">
+      <h2>Ajouter un visiteur / une personne hors annuaire</h2>
+      <div class="dialog-body form-grid">
+        <label>Nom complet
+          <input name="fullName" required minlength="2" maxlength="256" placeholder="ex. Paul DURAND" autocomplete="off">
+        </label>
+        <label>Société <span class="muted">(optionnel)</span>
+          <input name="company" maxlength="256" placeholder="ex. Entreprise extérieure" autocomplete="off">
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button type="submit" class="btn btn-primary">Continuer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Journal -->
+  <dialog id="audit-dialog" class="dialog dialog-wide">
+    <form method="dialog">
+      <h2>Journal de l'incident</h2>
+      <div class="dialog-body audit-body" id="audit-body"></div>
+      <div class="dialog-actions">
+        <button value="close" class="btn">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

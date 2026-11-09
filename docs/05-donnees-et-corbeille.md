@@ -143,7 +143,10 @@ Garde-fous :
 - **Écritures** : `conn.BeginTransaction()` de Microsoft.Data.Sqlite ouvre une transaction `BEGIN IMMEDIATE`, qui prend le verrou d'écriture **dès le début**. Deux ajouts simultanés de la même personne sont traités l'un après l'autre : le second voit le premier et reçoit « déjà comptée » (409). L'index unique est une seconde barrière : une violation éventuelle est convertie en 409 (`AddInternal`, `catch SqliteException 19`).
 - **Attente** : `busy_timeout = 5000`. Un agent qui écrit pendant l'écriture d'un autre attend jusqu'à 5 s au lieu d'échouer. Une écriture prend quelques millisecondes.
 - **Lectures** : le mode **WAL** permet de lire pendant une écriture, sans blocage.
-- **Affichage** : chaque écran d'incident se rafraîchit toutes les 5 s (`app.js`). Si un agent supprime l'incident, les autres sont ramenés à l'accueil avec un message.
+- **Affichage** : chaque écran d'incident se rafraîchit toutes les 5 s (`app.js`, `refresh` / `render`). Si un agent supprime l'incident, les autres sont ramenés à l'accueil avec un message.
+- **Saisie en cours non perturbée** : le rafraîchissement ne redessine que l'en-tête, les compteurs et les listes. Le champ de recherche (texte, focus, curseur) et la liste de suggestions ne sont jamais recréés. Le rafraîchissement est suspendu tant qu'une popup est ouverte (saisie d'un visiteur, confirmation). Rien n'est redessiné si les données n'ont pas changé.
+- **Suggestions à jour** : une personne comptée par un autre agent pendant que les suggestions sont ouvertes y est grisée « déjà comptée » au rafraîchissement suivant, sans reconstruire la liste (`syncSuggestionState`). L'état est aussi revérifié au clic, et le serveur refuse de toute façon le doublon (409).
+- **Ordre des réponses** : chaque rafraîchissement est numéroté ; une réponse plus ancienne que la dernière affichée est ignorée. L'écran ne revient jamais à un état périmé.
 
 ## Données personnelles
 

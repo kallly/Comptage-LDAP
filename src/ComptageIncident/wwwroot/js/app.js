@@ -424,6 +424,8 @@
               i.isClosed ? h('span') : h('button', { class: 'btn btn-sm btn-ok', type: 'button', onclick: () => restorePerson(p) }, '↺ Réintégrer')))))));
       }
       flashId = null;
+      // Si des suggestions sont ouvertes, une personne comptée entre-temps par un autre agent y est grisée.
+      syncSuggestionState();
     }
 
     /** Carte d'une liste (Internes ou Visiteurs) : titre, total, une ligne par personne avec bouton Supprimer. */
@@ -443,10 +445,22 @@
           : h('div', { class: 'empty', text: emptyText }));
     }
 
-    /** Recharge les données depuis le serveur et redessine. Si l'incident a été supprimé par un autre agent, retour à l'accueil. */
+    /**
+     * Recharge les données depuis le serveur et redessine. Si l'incident a été supprimé par un autre agent,
+     * retour à l'accueil.
+     * Le rafraîchissement automatique et celui qui suit une action peuvent se chevaucher : chaque appel est
+     * numéroté, et une réponse plus ancienne que la dernière affichée est ignorée. L'écran ne peut donc
+     * jamais revenir en arrière vers un état périmé.
+     */
+    let refreshSeq = 0;
+    let appliedSeq = 0;
     async function refresh() {
+      const seq = ++refreshSeq;
       try {
-        data = await api('GET', `/api/incidents/${id}`);
+        const fresh = await api('GET', `/api/incidents/${id}`);
+        if (seq < appliedSeq) return; // réponse dépassée par une plus récente
+        appliedSeq = seq;
+        data = fresh;
         render();
       } catch (e) {
         if (e.status === 404) { toast('Cet incident a été supprimé.', 'error'); location.hash = '#/'; }
@@ -600,19 +614,38 @@
       suggestions.replaceChildren(...results.map((p, index) => {
         const already = present.has(p.login.toLowerCase());
         const li = h('li', {
-          role: 'option', id: `sugg-${index}`, class: [already ? 'disabled' : '', index === active ? 'active' : ''].join(' ').trim() || null,
+          role: 'option', id: `sugg-${index}`, 'data-login': p.login, class: [already ? 'disabled' : '', index === active ? 'active' : ''].join(' ').trim() || null,
           'aria-disabled': already ? 'true' : null, 'aria-selected': index === active ? 'true' : 'false',
         },
         h('span', { class: 'who' }, h('b', { text: personName(p) }), h('small', { text: [p.department, p.login].filter(Boolean).join(' · ') })),
         already ? h('span', { class: 'badge badge-closed', text: 'déjà comptée' }) : null);
         li.addEventListener('mousedown', (e) => e.preventDefault()); // garde le focus dans le champ pendant le clic
-        li.addEventListener('click', () => { if (!already) addInternal(p); });
+        // L'état « déjà comptée » est vérifié AU MOMENT du clic (il a pu changer depuis l'affichage).
+        li.addEventListener('click', () => { if (!activeLogins().has(p.login.toLowerCase())) addInternal(p); });
         return li;
       }));
       suggestions.hidden = false;
       searchInput.setAttribute('aria-expanded', 'true');
       if (active >= 0) searchInput.setAttribute('aria-activedescendant', `sugg-${active}`);
       else searchInput.removeAttribute('aria-activedescendant');
+    }
+
+    /**
+     * Met à jour, SANS reconstruire la liste, l'état « déjà comptée » des suggestions affichées.
+     * Appelée après chaque rafraîchissement. Les lignes ne sont pas recréées : un clic en cours n'est pas
+     * perdu, et la sélection au clavier est conservée.
+     */
+    function syncSuggestionState() {
+      if (suggestions.hidden) return;
+      const present = activeLogins();
+      suggestions.querySelectorAll('li[data-login]').forEach((li) => {
+        const already = present.has(li.dataset.login.toLowerCase());
+        li.classList.toggle('disabled', already);
+        if (already) li.setAttribute('aria-disabled', 'true'); else li.removeAttribute('aria-disabled');
+        const badge = li.querySelector('.badge');
+        if (already && !badge) li.append(h('span', { class: 'badge badge-closed', text: 'déjà comptée' }));
+        else if (!already && badge) badge.remove();
+      });
     }
 
     /** Interroge /api/directory/search et affiche les suggestions (si la saisie n'a pas changé entre-temps). */
@@ -667,8 +700,11 @@
     // ---- Rafraîchissement automatique --------------------------------------------------------------
     //  Plusieurs agents peuvent compter simultanément sur le même incident (points de rassemblement
     //  différents) : toutes les 5 s, l'écran se met à jour avec les ajouts des autres.
-    //  Le rafraîchissement est suspendu quand l'onglet est masqué ou qu'une popup est ouverte, et relancé
-    //  immédiatement quand l'onglet redevient visible.
+    //  Le rafraîchissement est suspendu quand l'onglet est masqué ou qu'une popup est ouverte (saisie d'un
+    //  visiteur, confirmation…), et relancé immédiatement quand l'onglet redevient visible.
+    //  Il ne redessine QUE l'en-tête, les compteurs et les listes : le champ de recherche (texte, focus,
+    //  curseur) et la liste de suggestions ne sont jamais recréés. Une saisie en cours n'est donc pas perturbée.
+    //  Rien n'est redessiné si les données n'ont pas changé (comparaison avec lastSnapshot).
     render();
     searchInput.focus();
     const timer = setInterval(() => { if (!document.hidden && !anyDialogOpen()) refresh(); }, 5000);

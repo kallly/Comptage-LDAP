@@ -25,19 +25,26 @@ using ComptageIncident.Options;
 using ComptageIncident.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Negotiate;
-using Microsoft.Extensions.Hosting.WindowsServices;
 
 // -----------------------------------------------------------------------------------------------------
 // 1. Création de l'hôte
 // -----------------------------------------------------------------------------------------------------
-// Lorsqu'un service Windows démarre, son répertoire courant est C:\Windows\System32. Sans correction,
-// l'application chercherait appsettings.json, wwwroot et App_Data au mauvais endroit. On force donc le
-// « ContentRoot » sur le dossier de l'exécutable lorsque (et seulement lorsque) on tourne en service.
-// Sous IIS ou en console, le ContentRoot par défaut (dossier de l'application) est déjà correct.
+// Le « ContentRoot » est le dossier où l'application cherche appsettings.json, wwwroot (l'interface) et
+// App_Data (la base). Par défaut, ASP.NET Core prend le RÉPERTOIRE COURANT, ce qui pose problème hors IIS :
+//   - un service Windows démarre avec C:\Windows\System32 comme répertoire courant ;
+//   - un exe lancé par un raccourci, une tâche planifiée ou une invite de commande placée ailleurs démarre
+//     dans ce dossier-là.
+// Dans ces cas, l'interface renverrait 404, appsettings.json serait ignoré et la base serait créée au mauvais
+// endroit. On fixe donc le ContentRoot sur le DOSSIER DE L'EXÉCUTABLE dès qu'il contient wwwroot, c'est-à-dire
+// pour toute version publiée (IIS, service, exe), quel que soit le répertoire courant.
+// En développement (dotnet run), wwwroot est servi depuis le dossier du projet : le comportement par défaut
+// est conservé.
+var exeDir = AppContext.BaseDirectory;
+var isPublishedLayout = System.IO.Directory.Exists(Path.Combine(exeDir, "wwwroot"));
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null,
+    ContentRootPath = isPublishedLayout ? exeDir : null,
 });
 
 // Permet le fonctionnement en service Windows (mode autonome, voir deploy/Install-Service.ps1).

@@ -62,6 +62,33 @@ Ce que fait le script (commenté dans `deploy/Install-Service.ps1`) :
 
 Dans ce cas, **l'annuaire est interrogé avec le compte de l'utilisateur de la session** qui a lancé l'exe. L'application s'arrête à la fermeture de la fenêtre ou de la session. La base est créée dans `App_Data` à côté de l'exe : l'utilisateur doit avoir le droit d'y écrire.
 
+## Comment l'exe trouve l'interface (`wwwroot`)
+
+L'exe ne contient pas l'interface. Celle-ci est un **dossier de fichiers** livré à côté de lui par la publication :
+
+```
+C:\Apps\ComptageIncident  ComptageIncident.exe        lanceur (démarre le runtime .NET et ComptageIncident.dll)
+  ComptageIncident.dll        l'application (API, authentification, règles métier)
+  *.dll, e_sqlite3.dll        dépendances (dont le moteur SQLite)
+  appsettings.json            configuration
+  wwwroot\                    l'interface servie aux navigateurs
+    index.html
+    csspp.css
+    jspp.js
+    (*.gz, *.br : versions compressées générées par la publication)
+  App_Data\comptage.db        la base (créée au premier démarrage)
+```
+
+Fonctionnement :
+1. Au démarrage, l'application détermine son **dossier racine** (*ContentRoot*). Si le dossier de l'exe contient `wwwroot`, ce qui est le cas de toute version publiée, c'est **ce dossier** qui est utilisé, **quel que soit le répertoire courant** (`Program.cs`, section 1). Un double-clic, un raccourci, une tâche planifiée, une invite de commande placée ailleurs ou un service Windows donnent donc le même résultat.
+2. Le serveur Kestrel intégré sert les fichiers de `wwwroot` (`UseStaticFiles`) après l'authentification : `http://serveur:5080/` renvoie `wwwroot/index.html`, qui charge `css/app.css` et `js/app.js`.
+3. Le JavaScript appelle ensuite l'API `/api/...` du même exe.
+
+Conséquences pratiques :
+- **Copiez toujours le dossier publié en entier**. Sans `wwwroot`, l'API fonctionne mais la page renvoie 404.
+- On peut modifier l'apparence (`wwwroot/css/app.css`) sans recompiler : il suffit de recharger la page, car les fichiers sont servis avec `Cache-Control: no-cache`.
+- `appsettings.json` et `App_Data` sont aussi cherchés dans le dossier de l'exe, jamais dans le répertoire courant.
+
 ## Configuration du port et de l'adresse d'écoute
 
 Dans `appsettings.json`, section `Kestrel` :

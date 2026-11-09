@@ -248,6 +248,7 @@ a.incident-item:hover { border-color: var(--accent); }
   min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
   background: var(--surface); font-weight: 400;
 }
+.field-help { font-weight: 400; font-size: .82rem; }
 .audit-body { max-height: 60vh; overflow: auto; }
 .audit-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .audit-table th, .audit-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }

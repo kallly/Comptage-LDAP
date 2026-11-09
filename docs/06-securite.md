@@ -30,6 +30,7 @@ Ce document recense les menaces prises en compte, les protections mises en place
 | S16 | Mise en cache de listes nominatives | `Cache-Control: no-store` sur l'API | `Program.cs` 6.a | Lecture du code |
 | S17 | Dépendances vulnérables | 4 paquets Microsoft, versions figées et à jour ; runtime .NET 10 LTS ; aucune bibliothèque JavaScript | `ComptageIncident.csproj` | `dotnet list package --vulnerable --include-transitive` (aucune vulnérabilité à la date de livraison) |
 | S18 | Ressources externes compromises (CDN) | Aucune ressource externe ; CSP `default-src 'self'` | `index.html`, `Program.cs` | Lecture de `index.html` |
+| S20 | Caractères inattendus dans les noms saisis (injection, contournement, données parasites) | **Liste blanche** : lettres A-Z a-z, lettres accentuées, espace, `'`, `’`, `-`, au moins une lettre ; normalisation NFC préalable. Appliquée à la recherche annuaire et au nom d'un visiteur. S'ajoute à S6, S7, S8 et S9 | `Api/NameRules.cs` ; `ApiEndpoints` (routes `/directory/search` et `/persons/visitor`) ; copie indicative dans `app.js` (`NAME_PATTERN`) | `NameRulesTests` (noms réels de 8 langues acceptés, 16 saisies interdites refusées, forme NFD), `NameRulesApiTests` |
 | S19 | Droits excessifs du compte d'exécution | Pool en ApplicationPoolIdentity (compte virtuel) ; écriture limitée à `App_Data` ; aucun droit d'écriture dans l'AD | `Install-IIS.ps1` étape 6 ; `Install-Service.ps1` étape 6 | Lecture des scripts / `icacls` sur le serveur |
 
 ## Détail de quelques protections
@@ -57,6 +58,32 @@ Aucune donnée n'est donc interprétée comme du HTML. **Vérification** : `inne
 - Un clic accidentel sur « Supprimer » est intercepté par une popup dont le **bouton par défaut est « Annuler »** (`confirmDialog` place le focus sur Annuler).
 - Même confirmée, la suppression d'une personne est **réversible** (Personnes retirées › Réintégrer), et celle d'un incident l'est pendant 24 h.
 - Chaque action est horodatée et attribuée dans le journal.
+
+### S20 : liste blanche de caractères dans les noms saisis
+
+Expression régulière (`Api/NameRules.cs`) :
+
+```
+^[A-Za-zÀ-ÖØ-öø-ÿ\u0100-\u017F\u0218-\u021B'’\- ]+$
+```
+
+| Plage | Contenu |
+|---|---|
+| `A-Za-z` | lettres latines de base |
+| `À-Ö`, `Ø-ö`, `ø-ÿ` | lettres accentuées Latin-1 (é è ê ë à â ç ï î ô ö ù û ü ÿ ñ ß æ ø å…). Les plages évitent volontairement `×` et `÷` |
+| `\u0100-\u017F` | Latin étendu A : œ Œ Ÿ, et lettres polonaises, tchèques, hongroises, turques, baltes (ł ń ś ż č ř š ž ő ğ ş ı…) |
+| `\u0218-\u021B` | ș ț roumains |
+| `'` `’` | apostrophe droite et apostrophe typographique (Word, smartphones et Mac remplacent automatiquement l'une par l'autre) |
+| `-` | trait d'union |
+| espace | noms composés (« De La Fontaine ») et recherche sur plusieurs mots |
+
+Une seconde expression exige **au moins une lettre**. La saisie est d'abord **recomposée en forme NFC**, car certains claviers envoient « é » en deux caractères (e + accent combinant). Sans cela, ces noms seraient refusés à tort.
+
+Périmètre volontairement limité aux **noms saisis** :
+- **non appliquée** à la société d'un visiteur ni au titre ou au lieu d'un incident, où chiffres et ponctuation sont légitimes (« 3M », « Bât. B2 ») ;
+- **non appliquée** aux noms venant de l'annuaire : refuser un collègue réel pendant une évacuation à cause d'un caractère inattendu dans l'AD serait plus grave que le risque couvert.
+
+Ces champs restent protégés par S6 (SQL paramétré), S8 (affichage en `textContent`) et S9 (CSV).
 
 ## Limites connues et recommandations
 

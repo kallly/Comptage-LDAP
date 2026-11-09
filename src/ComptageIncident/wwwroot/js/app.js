@@ -69,6 +69,19 @@
   // Comparateur alphabétique français : ignore la casse et les accents (« Émilie » est rangée avec « Emilie »).
   const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
 
+  /**
+   * Caractères autorisés dans les noms SAISIS (recherche annuaire, nom d'un visiteur) : lettres A-Z a-z,
+   * lettres accentuées (Latin-1, Latin étendu A, ș ț roumains), espace, apostrophes ' et ’, trait d'union.
+   * Copie de la règle serveur Api/NameRules.cs, qui fait foi : ici, elle sert seulement à prévenir
+   * l'utilisateur avant l'envoi. La saisie est d'abord recomposée en forme NFC (accents saisis en deux
+   * caractères par certains claviers).
+   */
+  const NAME_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ÿ\u0100-\u017F\u0218-\u021B'’\- ]+$/u;
+  const NAME_LETTER = /[A-Za-zÀ-ÖØ-öø-ÿ\u0100-\u017F\u0218-\u021B]/u;
+  const NAME_HELP = 'Lettres (accents compris), espace, apostrophe et trait d\'union uniquement.';
+  const normalizeName = (v) => (v || '').normalize('NFC').trim();
+  const isValidName = (v) => NAME_PATTERN.test(v) && NAME_LETTER.test(v);
+
   /** « 1 personne » / « 3 personnes ». */
   function plural(n, one, many) { return `${n} ${n > 1 ? many : one}`; }
 
@@ -165,6 +178,8 @@
   function openFormDialog(dialog, onSubmit) {
     const form = $('form', dialog);
     form.reset();
+    // reset() n'efface pas les erreurs personnalisées (setCustomValidity) : on les remet à zéro.
+    form.querySelectorAll('input').forEach((i) => i.setCustomValidity(''));
     form.onsubmit = async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -483,8 +498,8 @@
       if (!ok) {
         // Annulation : on relance la recherche pour réafficher les suggestions à jour.
         searchInput.focus();
-        const q = searchInput.value.trim();
-        if (q.length >= config.minSearchLength) runSearch(q);
+        const q = normalizeName(searchInput.value);
+        if (q.length >= config.minSearchLength && isValidName(q)) runSearch(q);
         return;
       }
       try {
@@ -503,8 +518,15 @@
 
     /** Ajout d'un visiteur : formulaire (nom complet + société), popup de confirmation, puis appel API. */
     function addVisitor() {
+      // Contrôle du nom pendant la frappe : un nom invalide bloque la validation du formulaire
+      // (message natif du navigateur sous le champ), la popup reste ouverte pour corriger.
+      const nameInput = $('#visitor-dialog input[name=fullName]');
+      nameInput.oninput = () => {
+        const v = normalizeName(nameInput.value);
+        nameInput.setCustomValidity(v && !isValidName(v) ? `Caractère non autorisé. ${NAME_HELP}` : '');
+      };
       openFormDialog($('#visitor-dialog'), async (values) => {
-        const fullName = values.fullName.trim().replace(/\s+/g, ' ');
+        const fullName = normalizeName(values.fullName).replace(/\s+/g, ' ');
         const company = (values.company || '').trim();
         const ok = await confirmDialog({
           title: 'Ajouter ce visiteur ?',
@@ -650,6 +672,7 @@
 
     /** Interroge /api/directory/search et affiche les suggestions (si la saisie n'a pas changé entre-temps). */
     async function runSearch(q) {
+      q = normalizeName(q);
       if (controller) controller.abort();
       controller = new AbortController();
       hint.textContent = 'Recherche…';
@@ -657,7 +680,7 @@
         results = await api('GET', `/api/directory/search?q=${encodeURIComponent(q)}`, undefined, controller.signal);
         active = -1;
         hint.textContent = results.length ? `${plural(results.length, 'résultat', 'résultats')} — cliquez pour ajouter` : '';
-        if (searchInput.value.trim() === q) renderSuggestions();
+        if (normalizeName(searchInput.value) === q) renderSuggestions();
       } catch (e) {
         if (e.name === 'AbortError') return;
         hint.textContent = '';
@@ -667,7 +690,15 @@
 
     searchInput.addEventListener('input', () => {
       clearTimeout(debounce);
-      const q = searchInput.value.trim();
+      const q = normalizeName(searchInput.value);
+      if (q && !isValidName(q)) {
+        // Caractère hors liste blanche : aucune requête n'est envoyée, l'utilisateur est prévenu.
+        if (controller) controller.abort();
+        results = [];
+        hideSuggestions();
+        hint.textContent = `Caractère non autorisé. ${NAME_HELP}`;
+        return;
+      }
       if (q.length < config.minSearchLength) {
         if (controller) controller.abort();
         results = [];

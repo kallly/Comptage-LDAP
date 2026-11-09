@@ -11,7 +11,7 @@ Prérequis : SDK .NET 10 (https://dotnet.microsoft.com/download/dotnet/10.0). Fo
 ```bash
 # À la racine du dépôt
 dotnet test
-# Résultat attendu :  Passed!  - Failed: 0, Passed: 30
+# Résultat attendu :  Passed!  - Failed: 0, Passed: 76
 ```
 
 Vérifier aussi l'absence de vulnérabilité connue dans les dépendances :
@@ -20,7 +20,7 @@ dotnet list package --vulnerable --include-transitive
 # Résultat attendu : "has no vulnerable packages"
 ```
 
-### Ce que couvrent les tests (30 cas)
+### Ce que couvrent les tests (76 cas)
 
 | Fichier | Test | Ce qui est démontré |
 |---|---|---|
@@ -32,6 +32,10 @@ dotnet list package --vulnerable --include-transitive
 | | `L_export_CSV_neutralise_les_formules_Excel` | S9 |
 | | `Les_champs_trop_longs_sont_refuses` | S14 |
 | | `Une_personne_ne_peut_pas_etre_retiree_via_un_autre_incident` | S13 |
+| `NameRulesTests.cs` › `NameRulesTests` | `Les_noms_reels_sont_acceptes` (18 noms : français, allemand, nordique, polonais, tchèque, turc, roumain, espagnol, apostrophes `'` et `’`, traits d'union, noms composés) | **S20** : la liste blanche n'écarte pas de noms réels |
+| | `Les_autres_caracteres_sont_refuses` (16 saisies : `*`, `(`, `\`, chiffres, `<script>`, injection SQL, `=`, `@`, `"`, `;`, `_`, tabulation, `×`, `÷`, aucune lettre, vide) | S20 : tout le reste est refusé |
+| | `Un_accent_saisi_en_deux_caracteres_NFD_est_accepte` | Normalisation NFC |
+| `NameRulesTests.cs` › `NameRulesApiTests` | `La_recherche_annuaire_applique_la_liste_blanche`, `Le_nom_du_visiteur_applique_la_liste_blanche` | S20 appliquée par l'API (400 / 200 / 201) ; société libre (« 3M S.A. ») |
 | `ApiTests.cs` *(API en mémoire, utilisateur simulé)* | `Requete_de_modification_sans_entete_csrf_est_refusee` | S5 : anti-CSRF |
 | | `Utilisateur_courant_est_renvoye` | L'identité vient de l'authentification |
 | | `Recherche_annuaire_exige_4_caracteres` (3 → 400, 4 → 200) | Règle des 4 caractères **côté serveur** |
@@ -77,6 +81,7 @@ Pour chaque point : le fichier à ouvrir, ce qu'il faut y trouver et la conclusi
 | B5 | Pas d'injection HTML dans l'interface | `app.js` : fonction `h()` (`textContent`, `createTextNode`) ; `rg -n "innerHTML" src/` | Un seul `innerHTML`, sur une constante (icône) |
 | B6 | CSP stricte, sans ressource externe | `Program.cs` 6.a ; `index.html` (aucune URL `http`) ; `rg -n "<script>|style=" src/ComptageIncident/wwwroot` | `default-src 'self'` ; aucun script en ligne ni attribut `style` (la seule occurrence de `<script>` est dans un commentaire de `app.js`) |
 | B7 | CSV protégé | `ApiEndpoints.cs` : `Csv()` | Préfixe `'` devant `= + - @ \t \r` |
+| B9 | Liste blanche des noms saisis | `Api/NameRules.cs` (expressions `AllowedPattern` et `LetterPattern`, normalisation NFC) ; `ApiEndpoints.cs` : `NameRules.IsValid` dans `/directory/search` et `/persons/visitor` | Appliquée aux deux routes, côté serveur |
 | B8 | Anti-CSRF | `ApiEndpoints.cs` : `UseCsrfHeaderCheck` ; `Program.cs` : appelé après l'autorisation ; `rg -n "AddCors|UseCors" src/` | Présent ; aucune configuration CORS |
 
 ### C. Intégrité et traçabilité des données

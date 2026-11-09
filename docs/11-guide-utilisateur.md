@@ -24,10 +24,12 @@ Ouvrez l'adresse communiquée par le service informatique (ex. `http://comptage.
 
 Une personne déjà comptée apparaît **grisée « déjà comptée »** dans les suggestions et ne peut pas être ajoutée deux fois.
 
+Seuls les lettres (avec ou sans accent), l'espace, l'apostrophe et le trait d'union sont acceptés. Un autre caractère (chiffre, `*`, etc.) affiche « Caractère non autorisé ».
+
 ### 3. Compter les visiteurs et les personnes hors annuaire
 Prestataires, intérimaires, livreurs, ou toute personne introuvable dans la recherche :
 1. **+ Ajouter un visiteur**
-2. Saisissez le **nom complet** et éventuellement la **société**, puis **Continuer**
+2. Saisissez le **nom complet** (lettres, accents, espace, apostrophe, trait d'union) et éventuellement la **société** (texte libre), puis **Continuer**
 3. Confirmez avec **Ajouter**
 
 Si la recherche affiche « Annuaire indisponible », utilisez aussi ce bouton pour les internes.

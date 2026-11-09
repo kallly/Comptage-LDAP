@@ -40,15 +40,16 @@ Aucun autre attribut n'est demandé : ni groupes, ni téléphone, ni mot de pass
 ## Construction de la recherche
 
 ### Côté interface (`wwwroot/js/app.js`, section « Recherche dans l'annuaire »)
-1. Moins de **4 caractères** (`Directory:MinSearchLength`) : aucune requête, un indice « Encore N caractère(s)… » s'affiche.
+1. Moins de **4 caractères** (`Directory:MinSearchLength`) : aucune requête, un indice « Encore N caractère(s)… » s'affiche. Un caractère hors liste blanche (voir ci-dessous) affiche « Caractère non autorisé » et aucune requête n'est envoyée.
 2. À partir de 4 caractères, attente de **250 ms** sans nouvelle frappe, puis appel de `GET /api/directory/search?q=…`.
 3. Une nouvelle frappe **annule** la requête précédente (`AbortController`).
 
 ### Côté serveur
 1. `ApiEndpoints` : la longueur minimale est **revérifiée** (400 si la saisie est trop courte), ainsi que la longueur maximale (100 caractères).
-2. `DirectorySearch.Terms` : la saisie est découpée en mots, 4 au maximum.
-3. `DirectorySearch.EscapeLdap` : chaque mot est **échappé** (voir ci-dessous).
-4. `DirectorySearch.BuildFilter` : le filtre final est construit.
+2. `NameRules` : la saisie est recomposée en forme NFC, puis comparée à une **liste blanche** : lettres A-Z a-z, lettres accentuées, espace, apostrophes `'` et `’`, trait d'union. Tout autre caractère (`*`, `(`, `)`, `\`, chiffres, `<`, `=`…) est refusé avec une erreur **400**, avant toute interrogation de l'annuaire (voir [06 · S20](06-securite.md#s20--liste-blanche-de-caractères-dans-les-noms-saisis)).
+3. `DirectorySearch.Terms` : la saisie est découpée en mots, 4 au maximum.
+4. `DirectorySearch.EscapeLdap` : chaque mot est **échappé** (voir ci-dessous).
+5. `DirectorySearch.BuildFilter` : le filtre final est construit.
 
 Exemple pour la saisie `dupo jea` :
 
@@ -86,7 +87,7 @@ Sans précaution, un utilisateur pourrait saisir `*` (tout l'annuaire) ou `)(…
 | `)` | `\29` |
 | NUL | `\00` |
 
-Le seul `*` du filtre est celui que **le code** ajoute en fin de mot (« commence par »). Le test `ApiTests.Filtre_ldap_echappe_les_caracteres_speciaux` vérifie le filtre produit pour la saisie `du*(pont)`.
+Avec la liste blanche (`NameRules`), ces caractères ne peuvent d'ailleurs **plus atteindre** cette étape : l'échappement reste en place en **défense en profondeur**, au cas où la liste blanche serait un jour élargie. Le seul `*` du filtre est celui que **le code** ajoute en fin de mot (« commence par »). Le test `ApiTests.Filtre_ldap_echappe_les_caracteres_speciaux` vérifie le filtre produit pour la saisie `du*(pont)`.
 
 À noter aussi :
 - le **filtre de base** vient de la configuration (administrateur), jamais de l'utilisateur ;

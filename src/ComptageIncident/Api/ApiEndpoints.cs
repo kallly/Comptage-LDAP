@@ -5,7 +5,8 @@
 //  dans Program.cs : aucune route n'y déroge, il n'existe aucun [AllowAnonymous]).
 //
 //  Rôle de cette couche :
-//    1. VALIDER les données reçues (champs obligatoires, longueurs maximales, type d'incident autorisé) ;
+//    1. VALIDER les données reçues (champs obligatoires, longueurs maximales, type d'incident autorisé,
+//       liste blanche de caractères pour les noms saisis : voir NameRules.cs) ;
 //    2. récupérer l'identité de l'utilisateur (DOMAINE\login) fournie par l'authentification Windows :
 //       elle n'est JAMAIS lue depuis le corps de la requête, donc impossible à usurper par le client ;
 //    3. appeler IncidentRepository, qui applique les règles métier et écrit le journal d'audit ;
@@ -149,11 +150,13 @@ public static class ApiEndpoints
         });
 
         // Ajout d'un visiteur (saisie manuelle du nom complet, 2 caractères minimum).
+        // Le nom doit respecter la liste blanche de NameRules (lettres, accents, espace, apostrophe, tiret).
         api.MapPost("/incidents/{id:long}/persons/visitor", (long id, AddVisitorRequest req, IncidentRepository repo, ClaimsPrincipal user) =>
         {
-            var name = req.FullName?.Trim();
-            if (string.IsNullOrEmpty(name) || name.Length < 2) return Problem("Le nom complet du visiteur est obligatoire.");
+            var name = NameRules.Normalize(req.FullName);
+            if (name.Length < 2) return Problem("Le nom complet du visiteur est obligatoire.");
             if (TooLong(name, req.Company)) return Problem("Champ trop long.");
+            if (!NameRules.IsValid(name)) return Problem($"Nom invalide : seuls les caractères suivants sont acceptés : {NameRules.AllowedDescription}.");
             return ToResult(repo.AddVisitor(id, new NewVisitor(name, req.Company), UserName(user)), p => p, created: true);
         });
 
@@ -166,15 +169,21 @@ public static class ApiEndpoints
             ToResult(repo.RestorePerson(id, personId, UserName(user)), p => p));
 
         // -------------------------------------------------------------------------------- Annuaire
-        // Recherche de suggestions. La longueur minimale (4 par défaut) est contrôlée ICI aussi, et pas
-        // seulement dans l'interface : un appel direct à l'API ne peut pas lancer de recherche trop large.
+        // Recherche de suggestions. Contrôles faits ICI (et pas seulement dans l'interface), pour qu'un appel
+        // direct à l'API y soit aussi soumis :
+        //   1. longueur minimale (4 par défaut) : pas de recherche trop large ;
+        //   2. longueur maximale (100) ;
+        //   3. liste blanche de caractères (NameRules) : lettres, accents, espace, apostrophe, tiret.
+        // L'échappement LDAP (DirectorySearch.EscapeLdap) reste appliqué ensuite, en défense en profondeur.
         api.MapGet("/directory/search", async (string? q, IDirectoryService directory, IOptions<DirectoryOptions> options,
             ILoggerFactory loggerFactory, CancellationToken ct) =>
         {
-            var query = q?.Trim() ?? "";
+            var query = NameRules.Normalize(q);
             if (query.Length < options.Value.MinSearchLength)
                 return Problem($"Saisissez au moins {options.Value.MinSearchLength} caractères.");
             if (query.Length > 100) return Problem("Recherche trop longue.");
+            if (!NameRules.IsValid(query))
+                return Problem($"Caractère non autorisé. Seuls sont acceptés : {NameRules.AllowedDescription}.");
             try
             {
                 return Results.Ok(await directory.SearchAsync(query, ct));

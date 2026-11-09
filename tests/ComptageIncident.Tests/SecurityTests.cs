@@ -136,11 +136,15 @@ public sealed class DataSecurityTests(ApiFactory factory) : IClassFixture<ApiFac
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
 
         // La table Persons existe toujours et fonctionne ; le titre est conservé à l'identique.
-        var add = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "Robert'); --" });
+        var add = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "Robert O'Brien" });
         Assert.Equal(HttpStatusCode.Created, add.StatusCode);
         var detail = await client.GetFromJsonAsync<JsonElement>($"/api/incidents/{id}");
         Assert.Equal("Test'); DROP TABLE Persons;--", detail.GetProperty("incident").GetProperty("title").GetString());
-        Assert.Equal("Robert'); --", detail.GetProperty("persons")[0].GetProperty("displayName").GetString());
+        Assert.Equal("Robert O'Brien", detail.GetProperty("persons")[0].GetProperty("displayName").GetString());
+
+        // Dans un nom de visiteur, la même tentative est en plus bloquée par la liste blanche de caractères.
+        var injected = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "Robert'); --" });
+        Assert.Equal(HttpStatusCode.BadRequest, injected.StatusCode);
     }
 
     [Fact]
@@ -157,9 +161,9 @@ public sealed class DataSecurityTests(ApiFactory factory) : IClassFixture<ApiFac
     public async Task L_export_CSV_neutralise_les_formules_Excel()
     {
         var client = Client();
-        var created = await client.PostAsJsonAsync("/api/incidents", new { title = "CSV", type = "Autre" });
+        var created = await client.PostAsJsonAsync("/api/incidents", new { title = "+33 standard", type = "Autre" });
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
-        await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "=HYPERLINK(\"http://x\")", company = "+33" });
+        await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "Paul Durand", company = "=HYPERLINK(\"http://x\")" });
 
         var csv = await client.GetStringAsync($"/api/incidents/{id}/export.csv");
 

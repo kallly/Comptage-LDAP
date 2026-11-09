@@ -74,8 +74,8 @@ C:\Apps\ComptageIncident\
   appsettings.json            configuration
   wwwroot\                    l'interface servie aux navigateurs
     index.html
-    csspp.css
-    jspp.js
+    css\app.css
+    js\app.js
     (*.gz, *.br : versions compressées générées par la publication)
   App_Data\comptage.db        la base (créée au premier démarrage)
 ```

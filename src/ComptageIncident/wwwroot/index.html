@@ -1,14 +1,28 @@
 <!doctype html>
+<!--
+  =====================================================================================================
+   index.html : page unique de l'application « Comptage incident »
+  =====================================================================================================
+   - Le contenu de <main id="app"> est généré par js/app.js selon l'écran (Incidents, Corbeille, Incident).
+   - Les popups (<dialog>) sont déclarées ici une fois pour toutes et réutilisées par app.js.
+   - Aucun script ni style en ligne, aucune ressource externe : conforme à la politique de sécurité
+     (Content-Security-Policy) envoyée par le serveur (voir Program.cs).
+   - Cette page n'est servie qu'à un utilisateur authentifié par Windows.
+  =====================================================================================================
+-->
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Comptage incident</title>
+  <!-- Icône vide : évite une requête inutile vers /favicon.ico. -->
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/app.css">
+  <!-- « defer » : le script s'exécute une fois la page entièrement chargée. -->
   <script src="js/app.js" defer></script>
 </head>
 <body>
+  <!-- Barre du haut : nom de l'application, navigation, utilisateur Windows connecté (rempli par app.js). -->
   <header class="topbar">
     <a class="brand" href="#/">
       <span class="brand-mark" aria-hidden="true">!</span>
@@ -21,13 +35,19 @@
     <span class="user" id="current-user" title="Utilisateur connecté"></span>
   </header>
 
+  <!-- Zone principale, remplie par app.js. -->
   <main id="app" class="container" tabindex="-1">
     <p class="muted">Chargement…</p>
   </main>
 
+  <!-- Notifications temporaires (« X ajouté(e) », erreurs…), annoncées aux lecteurs d'écran. -->
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <!-- Popup de confirmation générique -->
+  <!--
+    Popup de confirmation générique (ajout, retrait, clôture, suppression, restauration).
+    method="dialog" : un clic sur un bouton ferme la popup et renseigne dialog.returnValue avec la « value »
+    du bouton ("ok" ou "cancel"). Échap ferme la popup sans valeur (= annulation).
+  -->
   <dialog id="confirm-dialog" class="dialog">
     <form method="dialog">
       <h2 id="confirm-title"></h2>
@@ -39,7 +59,7 @@
     </form>
   </dialog>
 
-  <!-- Création d'incident -->
+  <!-- Création d'incident. Les attributs required / maxlength sont vérifiés par le navigateur ET revérifiés par le serveur. -->
   <dialog id="incident-dialog" class="dialog">
     <form id="incident-form" method="dialog">
       <h2>Nouvel incident</h2>
@@ -61,7 +81,7 @@
     </form>
   </dialog>
 
-  <!-- Ajout d'un visiteur -->
+  <!-- Ajout d'un visiteur (ou de toute personne absente de l'annuaire) : nom complet obligatoire, société facultative. -->
   <dialog id="visitor-dialog" class="dialog">
     <form id="visitor-form" method="dialog">
       <h2>Ajouter un visiteur / une personne hors annuaire</h2>
@@ -80,7 +100,7 @@
     </form>
   </dialog>
 
-  <!-- Journal -->
+  <!-- Journal d'audit de l'incident (tableau rempli par app.js). -->
   <dialog id="audit-dialog" class="dialog dialog-wide">
     <form method="dialog">
       <h2>Journal de l'incident</h2>

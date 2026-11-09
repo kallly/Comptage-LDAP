@@ -1,3 +1,10 @@
+// =====================================================================================================
+//  RepositoryTests.cs : tests des règles métier (IncidentRepository) sur une vraie base SQLite temporaire
+// =====================================================================================================
+//  Vérifie les règles R1 à R5 décrites en tête de Data/IncidentRepository.cs : corbeille de 24 h (avec une
+//  horloge simulée pour « avancer le temps »), purge, doublons, clôture, réintégration, journal d'audit.
+// =====================================================================================================
+
 using ComptageIncident.Data;
 using ComptageIncident.Options;
 

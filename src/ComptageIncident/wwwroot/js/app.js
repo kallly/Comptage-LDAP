@@ -1,11 +1,49 @@
+/* =====================================================================================================
+ *  wwwroot/js/app.js : interface Web de « Comptage incident »
+ * =====================================================================================================
+ *  Application monopage (SPA) écrite en JavaScript natif, sans bibliothèque ni ressource externe :
+ *  elle fonctionne sur un réseau interne coupé d'Internet et respecte la politique de sécurité du
+ *  contenu (CSP) définie dans Program.cs (aucun script en ligne, aucun CDN).
+ *
+ *  Organisation du fichier :
+ *    1. Utilitaires (création d'éléments DOM sûre, formats de date, notifications)
+ *    2. Appels à l'API (ajout systématique de l'en-tête anti-CSRF)
+ *    3. Popups (confirmation, formulaires) basées sur l'élément natif <dialog>
+ *    4. Routage par « hash » : #/  #/corbeille  #/incident/{id}
+ *    5. Écran « Incidents »
+ *    6. Écran « Corbeille »
+ *    7. Écran « Incident » (compteurs, recherche annuaire, listes, actions, rafraîchissement auto)
+ *    8. Fonctions d'affichage des personnes (nom, tri alphabétique)
+ *    9. Démarrage
+ *
+ *  SÉCURITÉ (anti-XSS) : tout texte provenant du serveur ou de l'utilisateur (noms, titres…) est inséré
+ *  avec « textContent » via la fonction h(). Le navigateur l'affiche comme du texte brut, jamais comme du
+ *  HTML : un nom contenant « <script> » s'affiche tel quel, sans être exécuté. La seule utilisation
+ *  d'innerHTML concerne l'icône de loupe, dont le contenu est une constante écrite dans ce fichier.
+ *
+ *  L'interface n'est qu'une commodité d'affichage : TOUTES les règles (authentification, doublons,
+ *  incident clôturé, délai de corbeille, longueur minimale de recherche…) sont vérifiées par le serveur.
+ *  Détails : docs/02-architecture.md et docs/11-guide-utilisateur.md
+ * ===================================================================================================== */
 'use strict';
 
+// Tout le code est encapsulé dans une fonction immédiatement exécutée : aucune variable globale n'est créée.
 (() => {
-  // ================================================================ Utilitaires
+  // ================================================================================================
+  //  1. Utilitaires
+  // ================================================================================================
 
+  /** Raccourci de document.querySelector. */
   const $ = (sel, root = document) => root.querySelector(sel);
 
-  /** Crée un élément DOM. Le texte est toujours inséré via textContent (aucune injection HTML). */
+  /**
+   * Crée un élément DOM.
+   *   h('a', { class: 'btn', href: '#/', text: 'Retour' }, enfant1, enfant2…)
+   * - attribut « text »  : inséré via textContent (JAMAIS interprété comme du HTML : protection anti-XSS) ;
+   * - attributs « onxxx » avec une fonction : écouteur d'événement ;
+   * - enfants : nœuds DOM ou chaînes (les chaînes deviennent des nœuds texte, donc également sûres) ;
+   * - les valeurs null / undefined / false sont ignorées (pratique pour les éléments conditionnels).
+   */
   function h(tag, attrs, ...children) {
     const el = document.createElement(tag);
     for (const [key, value] of Object.entries(attrs || {})) {
@@ -22,14 +60,19 @@
     return el;
   }
 
+  // Formats de date français. Le serveur envoie des dates UTC ; le navigateur les convertit en heure locale.
   const dateFmt = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
   const timeFmt = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const fmtDate = (iso) => (iso ? dateFmt.format(new Date(iso)) : '');
   const fmtTime = (iso) => (iso ? timeFmt.format(new Date(iso)) : '');
+
+  // Comparateur alphabétique français : ignore la casse et les accents (« Émilie » est rangée avec « Emilie »).
   const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
 
+  /** « 1 personne » / « 3 personnes ». */
   function plural(n, one, many) { return `${n} ${n > 1 ? many : one}`; }
 
+  /** Temps restant avant une date, en clair (« dans 23 h 05 »). Utilisé pour la corbeille. */
   function remaining(iso) {
     const ms = new Date(iso) - Date.now();
     if (ms <= 0) return 'imminente';
@@ -39,18 +82,30 @@
     return hours > 0 ? `dans ${hours} h ${String(minutes).padStart(2, '0')}` : `dans ${minutes} min`;
   }
 
+  /** Notification temporaire en bas de l'écran (kind : '' neutre, 'ok' succès, 'error' erreur). */
   function toast(message, kind = '') {
     const el = h('div', { class: `toast ${kind}`, role: kind === 'error' ? 'alert' : 'status', text: message });
     $('#toasts').append(el);
     setTimeout(() => el.remove(), kind === 'error' ? 6000 : 3500);
   }
 
-  // ================================================================ API
+  // ================================================================================================
+  //  2. Appels à l'API
+  // ================================================================================================
 
+  /** Erreur renvoyée par l'API, avec le message en français fourni par le serveur et le code HTTP. */
   class ApiError extends Error {
     constructor(message, status) { super(message); this.status = status; }
   }
 
+  /**
+   * Appelle l'API.
+   * - credentials 'same-origin' : le navigateur joint l'authentification Windows (Negotiate) automatiquement.
+   * - Pour toute requête autre que GET, ajoute l'en-tête anti-CSRF X-Requested-With exigé par le serveur
+   *   (voir ApiEndpoints.UseCsrfHeaderCheck).
+   * - En cas d'erreur, lève une ApiError contenant le message renvoyé par le serveur ({ error: "…" }).
+   * - « signal » permet d'annuler une requête devenue inutile (recherche remplacée par une plus récente).
+   */
   async function api(method, url, body, signal) {
     const options = { method, headers: { Accept: 'application/json' }, credentials: 'same-origin', signal };
     if (method !== 'GET') options.headers['X-Requested-With'] = 'ComptageIncident';
@@ -62,7 +117,7 @@
     try {
       response = await fetch(url, options);
     } catch (e) {
-      if (e.name === 'AbortError') throw e;
+      if (e.name === 'AbortError') throw e; // annulation volontaire : propagée telle quelle
       throw new ApiError('Serveur injoignable. Vérifiez la connexion réseau.', 0);
     }
     const text = await response.text();
@@ -75,56 +130,81 @@
     return data;
   }
 
-  // ================================================================ Dialogues
+  // ================================================================================================
+  //  3. Popups
+  // ================================================================================================
 
-  /** Popup de confirmation : renvoie une promesse résolue à true si l'utilisateur valide. */
+  /**
+   * Popup de confirmation (ajout, suppression, clôture…). Renvoie une promesse résolue à :
+   *   true  si l'utilisateur clique sur le bouton de validation ;
+   *   false s'il clique sur « Annuler » ou appuie sur Échap.
+   * Les boutons de #confirm-dialog (index.html) sont dans un <form method="dialog"> : un clic ferme la
+   * popup et place la « value » du bouton (ok / cancel) dans dialog.returnValue.
+   * « body » : texte, nœud DOM, ou tableau mêlant les deux (chaque texte devient un paragraphe).
+   */
   function confirmDialog({ title, body, okText = 'Valider' }) {
     const dialog = $('#confirm-dialog');
     $('#confirm-title').textContent = title;
     const msg = $('#confirm-message');
     msg.replaceChildren(...(Array.isArray(body) ? body : [body]).map((b) => (b instanceof Node ? b : h('p', { text: b }))));
-    const ok = $('#confirm-ok');
-    ok.textContent = okText;
+    $('#confirm-ok').textContent = okText;
     dialog.returnValue = '';
     dialog.showModal();
-    // Le focus par défaut va sur « Annuler » pour éviter une validation accidentelle avec Entrée.
+    // Le focus initial est placé sur « Annuler » : un appui involontaire sur Entrée n'effectue aucune action.
     $('#confirm-cancel').focus();
     return new Promise((resolve) => {
       dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), { once: true });
     });
   }
 
+  /**
+   * Ouvre une popup contenant un formulaire (nouvel incident, nouveau visiteur).
+   * Le formulaire est vidé à chaque ouverture. À la validation, les règles HTML (required, minlength,
+   * maxlength) sont vérifiées par le navigateur, la popup est fermée puis onSubmit(valeurs) est appelé.
+   */
   function openFormDialog(dialog, onSubmit) {
     const form = $('form', dialog);
     form.reset();
-    const submit = async (event) => {
+    form.onsubmit = async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
       const values = Object.fromEntries(new FormData(form).entries());
       dialog.close();
       await onSubmit(values);
     };
-    form.onsubmit = submit;
     dialog.querySelectorAll('[data-close]').forEach((b) => { b.onclick = () => dialog.close(); });
     dialog.showModal();
     const first = form.querySelector('input, select');
     if (first) first.focus();
   }
 
+  /** Vrai si une popup est ouverte (le rafraîchissement automatique est alors suspendu). */
   const anyDialogOpen = () => !!document.querySelector('dialog[open]');
 
-  // ================================================================ Routage
+  // ================================================================================================
+  //  4. Routage
+  // ================================================================================================
+  //  L'écran affiché dépend de la partie « # » de l'adresse :
+  //    #/               liste des incidents
+  //    #/corbeille      corbeille
+  //    #/incident/12    incident n°12
+  //  Le bouton « Précédent » du navigateur fonctionne donc normalement, et une adresse d'incident peut
+  //  être partagée entre agents.
 
   const app = $('#app');
+  /** Paramètres reçus de /api/config au démarrage (valeurs par défaut en attendant). */
   let config = { minSearchLength: 4, trashRetentionHours: 24, incidentTypes: [] };
+  /** Fonction de nettoyage de l'écran courant (arrêt des minuteurs, annulation des requêtes). */
   let pageCleanup = null;
 
+  /** Remplace le contenu de la page, nettoie l'écran précédent et met en évidence le menu actif. */
   function setPage(nav, ...content) {
     if (pageCleanup) { pageCleanup(); pageCleanup = null; }
     document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === nav));
     app.replaceChildren(...content);
   }
 
+  /** Affiche l'écran correspondant à l'adresse courante. */
   async function route() {
     const hash = location.hash || '#/';
     const incidentMatch = hash.match(/^#\/incident\/(\d+)$/);
@@ -139,8 +219,11 @@
     }
   }
 
-  // ================================================================ Liste des incidents
+  // ================================================================================================
+  //  5. Écran « Incidents »
+  // ================================================================================================
 
+  /** Liste des incidents : « En cours » puis « Clôturés », avec bouton de création. */
   async function renderIncidents() {
     const incidents = await api('GET', '/api/incidents');
     const open = incidents.filter((i) => !i.isClosed);
@@ -160,6 +243,7 @@
       closed.length ? incidentList(closed) : null);
   }
 
+  /** Cartes cliquables des incidents (titre, statut, type, lieu, créateur, compteurs). */
   function incidentList(items, emptyText) {
     if (!items.length) return h('div', { class: 'card empty', text: emptyText });
     return h('div', { class: 'incident-list' }, items.map((i) =>
@@ -176,6 +260,7 @@
         counts(i))));
   }
 
+  /** Bloc « internes / visiteurs / total » d'une carte d'incident. */
   function counts(i) {
     return h('div', { class: 'incident-counts' },
       h('div', {}, h('b', { text: i.internalCount }), h('span', { text: 'internes' })),
@@ -183,6 +268,7 @@
       h('div', {}, h('b', { text: i.totalCount }), h('span', { text: 'total' })));
   }
 
+  /** Popup « Nouvel incident » puis ouverture de l'incident créé. */
   function createIncident() {
     const dialog = $('#incident-dialog');
     const select = $('select[name=type]', dialog);
@@ -196,8 +282,11 @@
     });
   }
 
-  // ================================================================ Corbeille
+  // ================================================================================================
+  //  6. Écran « Corbeille »
+  // ================================================================================================
 
+  /** Incidents supprimés, avec le temps restant avant suppression définitive et un bouton Restaurer. */
   async function renderTrash() {
     const items = await api('GET', '/api/trash');
     setPage('trash',
@@ -217,6 +306,7 @@
         : h('div', { class: 'card empty', text: 'La corbeille est vide.' }));
   }
 
+  /** Restauration d'un incident après confirmation, puis ouverture de celui-ci. */
   async function restoreIncident(i) {
     const ok = await confirmDialog({
       title: 'Restaurer l\'incident',
@@ -231,21 +321,30 @@
     } catch (e) { toast(e.message, 'error'); renderTrash(); }
   }
 
-  // ================================================================ Page incident
+  // ================================================================================================
+  //  7. Écran « Incident »
+  // ================================================================================================
 
+  /**
+   * Écran principal de comptage.
+   * Le squelette (titre, compteurs, barre de recherche, listes) est construit UNE fois ; seules les zones de
+   * données sont redessinées à chaque rafraîchissement. Le champ de recherche n'est donc jamais réinitialisé
+   * pendant la saisie, même quand les listes se mettent à jour toutes les 5 secondes.
+   */
   async function renderIncident(id) {
-    let data = await api('GET', `/api/incidents/${id}`);
-    let lastSnapshot = '';
-    let flashId = null;
+    let data = await api('GET', `/api/incidents/${id}`); // { incident, persons, removed }
+    let lastSnapshot = '';  // dernière version affichée (évite de redessiner si rien n'a changé)
+    let flashId = null;     // personne venant d'être ajoutée (brièvement surlignée)
 
-    // ---- Squelette (construit une seule fois ; la recherche n'est jamais reconstruite)
+    // ---- Squelette ---------------------------------------------------------------------------------
     const head = h('div', { class: 'page-head' });
     const banner = h('div', { class: 'status-banner', hidden: true });
     const totals = h('div', { class: 'totals' });
     const listsEl = h('div', { class: 'lists' });
     const removedEl = h('div');
-    const printHead = h('div', { class: 'print-only' });
+    const printHead = h('div', { class: 'print-only' }); // en-tête visible uniquement à l'impression
 
+    // Champ de recherche, avec attributs d'accessibilité (combobox + liste de suggestions).
     const searchInput = h('input', {
       type: 'search', id: 'search', autocomplete: 'off', spellcheck: 'false',
       placeholder: `Nom ou prénom (${config.minSearchLength} caractères min.)`,
@@ -254,6 +353,7 @@
     });
     const suggestions = h('ul', { class: 'suggestions', id: 'suggestions', role: 'listbox', hidden: true });
     const hint = h('p', { class: 'search-hint' });
+    // Icône loupe (SVG constant, aucune donnée externe).
     const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     searchIcon.setAttribute('viewBox', '0 0 24 24');
     searchIcon.setAttribute('class', 'search-icon');
@@ -266,13 +366,15 @@
 
     setPage('incidents', printHead, head, banner, totals, addBar, listsEl, removedEl);
 
-    // ---- Rendu des données
+    // ---- Affichage des données ---------------------------------------------------------------------
+    /** Redessine en-tête, compteurs et listes à partir de « data » (seulement si les données ont changé). */
     function render() {
       const snapshot = JSON.stringify(data);
       if (snapshot === lastSnapshot) return;
       lastSnapshot = snapshot;
 
       const i = data.incident;
+      // Deux listes distinctes, chacune triée par ordre alphabétique (voir byName).
       const internals = data.persons.filter((p) => p.kind === 'internal').sort(byName);
       const visitors = data.persons.filter((p) => p.kind === 'visitor').sort(byName);
       document.title = `${i.title} — Comptage incident`;
@@ -294,6 +396,8 @@
             : h('button', { class: 'btn btn-ok', type: 'button', onclick: () => setClosed(true) }, '✓ Clôturer'),
           h('button', { class: 'btn btn-danger', type: 'button', onclick: trashIncident }, 'Supprimer l\'incident')));
 
+      // Incident clôturé : bandeau d'information, barre d'ajout masquée, boutons Supprimer masqués.
+      // (Le serveur refuse de toute façon les modifications : ceci n'est qu'un confort d'affichage.)
       banner.hidden = !i.isClosed;
       banner.textContent = i.isClosed ? `Incident clôturé le ${fmtDate(i.closedAt)} par ${i.closedBy} — listes en lecture seule.` : '';
       addBar.hidden = i.isClosed;
@@ -307,6 +411,7 @@
         personList('Internes', 'list-internal', internals, i.isClosed, 'Aucune personne interne comptée.'),
         personList('Visiteurs', 'list-visitor', visitors, i.isClosed, 'Aucun visiteur compté.'));
 
+      // Section repliable des personnes retirées, avec bouton « Réintégrer ».
       removedEl.replaceChildren();
       if (data.removed.length) {
         removedEl.append(h('details', { class: 'removed' },
@@ -321,6 +426,7 @@
       flashId = null;
     }
 
+    /** Carte d'une liste (Internes ou Visiteurs) : titre, total, une ligne par personne avec bouton Supprimer. */
     function personList(title, cls, people, readOnly, emptyText) {
       return h('section', { class: `card list-card ${cls}` },
         h('header', {}, h('h2', { text: title }), h('span', { class: 'count', title: `Total ${title.toLowerCase()}`, text: people.length })),
@@ -337,6 +443,7 @@
           : h('div', { class: 'empty', text: emptyText }));
     }
 
+    /** Recharge les données depuis le serveur et redessine. Si l'incident a été supprimé par un autre agent, retour à l'accueil. */
     async function refresh() {
       try {
         data = await api('GET', `/api/incidents/${id}`);
@@ -346,10 +453,12 @@
       }
     }
 
-    // ---- Actions
+    // ---- Actions -----------------------------------------------------------------------------------
+
+    /** Ajout d'une personne interne choisie dans les suggestions : popup de confirmation, puis appel API. */
     async function addInternal(person) {
       hideSuggestions();
-      results = []; // évite de réafficher des suggestions périmées au retour du focus
+      results = []; // évite de réafficher des suggestions périmées quand le focus revient au champ
       const ok = await confirmDialog({
         title: 'Ajouter cette personne ?',
         body: [h('p', { class: 'highlight', text: personName(person) }),
@@ -358,6 +467,7 @@
         okText: 'Ajouter',
       });
       if (!ok) {
+        // Annulation : on relance la recherche pour réafficher les suggestions à jour.
         searchInput.focus();
         const q = searchInput.value.trim();
         if (q.length >= config.minSearchLength) runSearch(q);
@@ -373,10 +483,11 @@
         searchInput.value = '';
         hint.textContent = '';
         await refresh();
-      } catch (e) { toast(e.message, 'error'); }
-      searchInput.focus();
+      } catch (e) { toast(e.message, 'error'); } // ex. « déjà comptée » (409) si un autre agent l'a ajoutée entre-temps
+      searchInput.focus(); // prêt pour la personne suivante
     }
 
+    /** Ajout d'un visiteur : formulaire (nom complet + société), popup de confirmation, puis appel API. */
     function addVisitor() {
       openFormDialog($('#visitor-dialog'), async (values) => {
         const fullName = values.fullName.trim().replace(/\s+/g, ' ');
@@ -396,6 +507,7 @@
       });
     }
 
+    /** « Supprimer » une personne (retrait logique, réintégrable) après confirmation. */
     async function removePerson(p) {
       const ok = await confirmDialog({
         title: 'Retirer cette personne ?',
@@ -411,6 +523,7 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    /** Réintègre une personne retirée (action de correction : pas de popup, l'action est elle-même réversible). */
     async function restorePerson(p) {
       try {
         const restored = await api('POST', `/api/incidents/${id}/persons/${p.id}/restore`);
@@ -420,6 +533,7 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    /** Clôture (close = true) ou réouverture (close = false) après confirmation. */
     async function setClosed(close) {
       const ok = await confirmDialog(close
         ? { title: 'Clôturer l\'incident ?', body: 'Les listes passeront en lecture seule. L\'incident pourra être rouvert.', okText: 'Clôturer' }
@@ -432,6 +546,7 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    /** Mise en corbeille de l'incident après confirmation (rappel du nombre de personnes et du délai de restauration). */
     async function trashIncident() {
       const i = data.incident;
       const ok = await confirmDialog({
@@ -449,12 +564,21 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    // ---- Recherche annuaire
+    // ---- Recherche dans l'annuaire -----------------------------------------------------------------
+    //  Fonctionnement :
+    //   1. À chaque frappe, si moins de N caractères (4 par défaut) : rien n'est envoyé, un indice s'affiche.
+    //   2. Sinon, on attend 250 ms sans nouvelle frappe (« debounce ») avant d'interroger le serveur, pour ne
+    //      pas solliciter l'annuaire à chaque lettre.
+    //   3. Une recherche en cours est annulée si une nouvelle commence (AbortController) : seuls les
+    //      résultats de la dernière saisie s'affichent.
+    //   4. Les personnes déjà comptées apparaissent grisées « déjà comptée » et ne sont pas cliquables.
+    //   5. Clavier : ↑ ↓ pour naviguer, Entrée pour choisir, Échap pour fermer / vider.
     let debounce = null;
     let controller = null;
     let results = [];
-    let active = -1;
+    let active = -1; // index de la suggestion sélectionnée au clavier (-1 = aucune)
 
+    /** Identifiants (en minuscules) des personnes internes actuellement comptées. */
     const activeLogins = () => new Set(data.persons.filter((p) => p.kind === 'internal' && p.login).map((p) => p.login.toLowerCase()));
 
     function hideSuggestions() {
@@ -463,6 +587,7 @@
       active = -1;
     }
 
+    /** Affiche un message (aucun résultat, erreur…) à la place des suggestions. */
     function showInfo(text) {
       suggestions.replaceChildren(h('li', { class: 'info', text }));
       suggestions.hidden = false;
@@ -480,7 +605,7 @@
         },
         h('span', { class: 'who' }, h('b', { text: personName(p) }), h('small', { text: [p.department, p.login].filter(Boolean).join(' · ') })),
         already ? h('span', { class: 'badge badge-closed', text: 'déjà comptée' }) : null);
-        li.addEventListener('mousedown', (e) => e.preventDefault()); // garde le focus sur le champ
+        li.addEventListener('mousedown', (e) => e.preventDefault()); // garde le focus dans le champ pendant le clic
         li.addEventListener('click', () => { if (!already) addInternal(p); });
         return li;
       }));
@@ -490,6 +615,7 @@
       else searchInput.removeAttribute('aria-activedescendant');
     }
 
+    /** Interroge /api/directory/search et affiche les suggestions (si la saisie n'a pas changé entre-temps). */
     async function runSearch(q) {
       if (controller) controller.abort();
       controller = new AbortController();
@@ -502,7 +628,7 @@
       } catch (e) {
         if (e.name === 'AbortError') return;
         hint.textContent = '';
-        showInfo(e.message);
+        showInfo(e.message); // ex. « Annuaire indisponible… »
       }
     }
 
@@ -527,6 +653,7 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % results.length; renderSuggestions(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + results.length) % results.length; renderSuggestions(); }
       else if (e.key === 'Enter') {
+        // Entrée choisit la suggestion sélectionnée, ou l'unique résultat s'il n'y en a qu'un.
         e.preventDefault();
         const choice = results[active >= 0 ? active : (results.length === 1 ? 0 : -1)];
         if (choice && !activeLogins().has(choice.login.toLowerCase())) addInternal(choice);
@@ -534,9 +661,14 @@
     });
 
     searchInput.addEventListener('focus', () => { if (results.length && searchInput.value.trim().length >= config.minSearchLength) renderSuggestions(); });
+    // Délai avant fermeture : laisse le temps au clic sur une suggestion d'être pris en compte.
     searchInput.addEventListener('blur', () => setTimeout(hideSuggestions, 150));
 
-    // ---- Rafraîchissement automatique (plusieurs agents peuvent compter en parallèle)
+    // ---- Rafraîchissement automatique --------------------------------------------------------------
+    //  Plusieurs agents peuvent compter simultanément sur le même incident (points de rassemblement
+    //  différents) : toutes les 5 s, l'écran se met à jour avec les ajouts des autres.
+    //  Le rafraîchissement est suspendu quand l'onglet est masqué ou qu'une popup est ouverte, et relancé
+    //  immédiatement quand l'onglet redevient visible.
     render();
     searchInput.focus();
     const timer = setInterval(() => { if (!document.hidden && !anyDialogOpen()) refresh(); }, 5000);
@@ -551,6 +683,7 @@
     };
   }
 
+  /** Popup « Journal » : historique des actions de l'incident (date, utilisateur, action, détail). */
   async function showAudit(id) {
     const dialog = $('#audit-dialog');
     const body = $('#audit-body');
@@ -567,22 +700,31 @@
     }
   }
 
-  // ================================================================ Personnes
+  // ================================================================================================
+  //  8. Affichage des personnes
+  // ================================================================================================
 
-  /** Affichage « NOM Prénom » pour les internes, nom saisi pour les visiteurs. */
+  /** Nom affiché : « NOM Prénom » pour les internes, nom saisi pour les visiteurs. */
   function personName(p) {
     if (p.lastName || p.firstName) return [p.lastName ? p.lastName.toUpperCase() : null, p.firstName].filter(Boolean).join(' ');
     return p.displayName;
   }
 
+  /**
+   * Ordre alphabétique : par nom de famille (ou nom saisi pour un visiteur), puis par prénom,
+   * sans tenir compte de la casse ni des accents. En cas d'égalité parfaite, ordre d'ajout.
+   */
   function byName(a, b) {
     return collator.compare(a.lastName || a.displayName, b.lastName || b.displayName)
       || collator.compare(a.firstName || '', b.firstName || '')
       || a.id - b.id;
   }
 
-  // ================================================================ Démarrage
+  // ================================================================================================
+  //  9. Démarrage
+  // ================================================================================================
 
+  /** Charge l'utilisateur connecté et la configuration, puis affiche l'écran demandé par l'adresse. */
   async function start() {
     try {
       const [me, cfg] = await Promise.all([api('GET', '/api/me'), api('GET', '/api/config')]);

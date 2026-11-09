@@ -1,3 +1,11 @@
+// =====================================================================================================
+//  ApiTests.cs : tests de l'API REST de bout en bout (application démarrée en mémoire)
+// =====================================================================================================
+//  L'application tourne en environnement Development avec l'utilisateur simulé TEST\agent et l'annuaire
+//  fictif, sur une base SQLite temporaire. Chaque test envoie de vraies requêtes HTTP et vérifie les codes
+//  de retour et les données (anti-CSRF, longueur minimale de recherche, doublons, corbeille, clôture…).
+// =====================================================================================================
+
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;

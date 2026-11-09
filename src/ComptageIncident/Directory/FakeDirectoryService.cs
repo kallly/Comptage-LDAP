@@ -1,3 +1,13 @@
+// =====================================================================================================
+//  Directory/FakeDirectoryService.cs : annuaire FICTIF (développement et tests uniquement)
+// =====================================================================================================
+//  Activé seulement si Directory:Provider = "Fake" (appsettings.Development.json). La configuration de
+//  production (appsettings.json) utilise "ActiveDirectory".
+//  Il reproduit le comportement de l'annuaire réel (recherche « commence par » sur nom/prénom, insensible
+//  aux accents et à la casse, tri par nom, limite de résultats) pour tester l'interface hors domaine.
+//  Les noms ci-dessous sont inventés.
+// =====================================================================================================
+
 using System.Globalization;
 using System.Text;
 using ComptageIncident.Options;
@@ -8,6 +18,7 @@ namespace ComptageIncident.Directory;
 /// <summary>Annuaire fictif pour le développement et les tests (hors domaine Windows).</summary>
 public sealed class FakeDirectoryService : IDirectoryService
 {
+    /// <summary>Personnes fictives (prénom, nom, service).</summary>
     private static readonly (string First, string Last, string Dept)[] People =
     [
         ("Jean", "Dupont", "Production"), ("Marie", "Dupond", "Qualité"), ("Pierre", "Martin", "Maintenance"),
@@ -34,6 +45,7 @@ public sealed class FakeDirectoryService : IDirectoryService
     {
         var terms = DirectorySearch.Terms(query).Select(Normalize).ToArray();
         IReadOnlyList<DirectoryPerson> result = People
+            // Chaque mot doit commencer le prénom, le nom ou une partie d'un prénom composé.
             .Where(p => terms.All(t =>
                 Normalize(p.First).StartsWith(t, StringComparison.Ordinal) ||
                 Normalize(p.Last).StartsWith(t, StringComparison.Ordinal) ||
@@ -42,7 +54,7 @@ public sealed class FakeDirectoryService : IDirectoryService
             .ThenBy(p => p.First)
             .Take(_maxResults)
             .Select(p => new DirectoryPerson(
-                Login: Normalize(p.First)[..1] + Normalize(p.Last).Replace(" ", ""),
+                Login: Normalize(p.First)[..1] + Normalize(p.Last).Replace(" ", ""), // ex. « jdupont »
                 FirstName: p.First,
                 LastName: p.Last,
                 DisplayName: $"{p.Last.ToUpperInvariant()} {p.First}",
@@ -52,6 +64,7 @@ public sealed class FakeDirectoryService : IDirectoryService
         return Task.FromResult(result);
     }
 
+    /// <summary>Minuscules et suppression des accents (« Émilie » → « emilie »).</summary>
     private static string Normalize(string s)
     {
         var decomposed = s.ToLowerInvariant().Normalize(NormalizationForm.FormD);

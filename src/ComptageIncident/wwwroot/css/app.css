@@ -1,3 +1,15 @@
+/* =====================================================================================================
+ *  wwwroot/css/app.css : apparence de l'interface
+ * =====================================================================================================
+ *  - Couleurs définies une seule fois sous forme de variables (:root), avec une variante sombre
+ *    automatique si le poste est en mode sombre (prefers-color-scheme).
+ *  - Code couleur : rouge = incident / actions de suppression, bleu = internes, violet = visiteurs,
+ *    vert = validation / restauration.
+ *  - Mise en page adaptée aux petits écrans (tablette, smartphone) sous 820 px de large.
+ *  - Feuille d'impression (@media print) : seules les listes, les totaux et un en-tête daté sont imprimés.
+ *  Aucune police, image ou ressource externe n'est chargée.
+ * ===================================================================================================== */
+
 :root {
   --bg: #f4f5f7;
   --surface: #ffffff;
@@ -44,6 +56,7 @@
 
 * { box-sizing: border-box; }
 
+/* Garantit qu'un élément marqué « hidden » est toujours masqué, même s'il a un display défini plus bas. */
 [hidden] { display: none !important; }
 
 html, body { margin: 0; }
@@ -202,6 +215,7 @@ a.incident-item:hover { border-color: var(--accent); }
 .people li:last-child { border-bottom: none; }
 .people .name { font-weight: 600; }
 .people .detail { font-size: .85rem; color: var(--muted); }
+/* Surlignage bref de la personne qui vient d'être ajoutée ou réintégrée. */
 .people li.flash { animation: flash 1.6s ease-out; }
 @keyframes flash { from { background: var(--ok-soft); } to { background: transparent; } }
 

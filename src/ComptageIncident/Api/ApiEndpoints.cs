@@ -1,3 +1,26 @@
+// =====================================================================================================
+//  Api/ApiEndpoints.cs : API REST utilisée par l'interface Web (wwwroot/js/app.js)
+// =====================================================================================================
+//  Toutes les routes sont sous /api et exigent un utilisateur Windows authentifié (règle globale définie
+//  dans Program.cs : aucune route n'y déroge, il n'existe aucun [AllowAnonymous]).
+//
+//  Rôle de cette couche :
+//    1. VALIDER les données reçues (champs obligatoires, longueurs maximales, type d'incident autorisé) ;
+//    2. récupérer l'identité de l'utilisateur (DOMAINE\login) fournie par l'authentification Windows :
+//       elle n'est JAMAIS lue depuis le corps de la requête, donc impossible à usurper par le client ;
+//    3. appeler IncidentRepository, qui applique les règles métier et écrit le journal d'audit ;
+//    4. traduire le résultat en code HTTP :
+//         200 OK / 201 Created   succès
+//         400 Bad Request        données invalides, ou en-tête anti-CSRF absent
+//         401 Unauthorized       non authentifié (géré par ASP.NET Core avant d'arriver ici)
+//         404 Not Found          incident/personne inexistant ou en corbeille
+//         409 Conflict           règle métier : doublon, incident clôturé, délai de restauration dépassé
+//         503 Service Unavailable annuaire injoignable
+//       Les erreurs sont renvoyées sous la forme { "error": "message en français" }.
+//
+//  Référence complète de l'API : docs/10-reference-api.md
+// =====================================================================================================
+
 using System.Globalization;
 using System.Security.Claims;
 using System.Text;
@@ -10,19 +33,26 @@ namespace ComptageIncident.Api;
 
 public static class ApiEndpoints
 {
+    /// <summary>En-tête anti-CSRF exigé sur les requêtes de modification (voir UseCsrfHeaderCheck).</summary>
     public const string CsrfHeader = "X-Requested-With";
     public const string CsrfValue = "ComptageIncident";
 
+    // Corps JSON attendus. Tous les champs sont « nullable » : la validation est faite explicitement ci-dessous
+    // pour renvoyer des messages en français plutôt qu'une erreur technique de désérialisation.
     public sealed record CreateIncidentRequest(string? Title, string? Type, string? Location);
     public sealed record AddInternalRequest(string? Login, string? FirstName, string? LastName, string? DisplayName, string? Department);
     public sealed record AddVisitorRequest(string? FullName, string? Company);
 
+    /// <summary>Déclare toutes les routes de l'API.</summary>
     public static void MapApi(this WebApplication app)
     {
         var api = app.MapGroup("/api");
 
+        // -------------------------------------------------------------------------------- Informations
+        // Utilisateur connecté (affiché en haut à droite de l'interface).
         api.MapGet("/me", (ClaimsPrincipal user) => new { name = UserName(user) });
 
+        // Paramètres utiles à l'interface (aucune donnée sensible).
         api.MapGet("/config", (IOptions<DirectoryOptions> dir, IOptions<TrashOptions> trash) => new
         {
             minSearchLength = dir.Value.MinSearchLength,
@@ -30,15 +60,17 @@ public static class ApiEndpoints
             incidentTypes = IncidentTypes.All,
         });
 
-        // ------------------------------------------------------------ Incidents
-
+        // -------------------------------------------------------------------------------- Incidents
+        // Liste des incidents hors corbeille, avec leurs compteurs.
         api.MapGet("/incidents", (IncidentRepository repo) => repo.ListIncidents().Select(ToDto));
 
+        // Création d'un incident.
         api.MapPost("/incidents", (CreateIncidentRequest req, IncidentRepository repo, ClaimsPrincipal user) =>
         {
             var title = req.Title?.Trim();
             if (string.IsNullOrEmpty(title)) return Problem("Le titre de l'incident est obligatoire.");
             if (title.Length > 200) return Problem("Le titre est trop long (200 caractères max).");
+            // Le type doit appartenir à la liste fermée IncidentTypes.All (comparaison insensible à la casse).
             var type = IncidentTypes.All.FirstOrDefault(t => string.Equals(t, req.Type?.Trim(), StringComparison.OrdinalIgnoreCase));
             if (type is null) return Problem("Type d'incident inconnu.");
             var location = req.Location?.Trim();
@@ -48,6 +80,8 @@ public static class ApiEndpoints
             return Results.Created($"/api/incidents/{incident.Id}", ToDto(incident));
         });
 
+        // Détail d'un incident : l'incident + les personnes actives + les personnes retirées.
+        // L'interface appelle cette route toutes les 5 secondes pour rester à jour.
         api.MapGet("/incidents/{id:long}", (long id, IncidentRepository repo) =>
         {
             var incident = repo.GetIncident(id);
@@ -61,29 +95,34 @@ public static class ApiEndpoints
             });
         });
 
+        // Clôture / réouverture.
         api.MapPost("/incidents/{id:long}/close", (long id, IncidentRepository repo, ClaimsPrincipal user) =>
             ToResult(repo.CloseIncident(id, UserName(user)), ToDto));
 
         api.MapPost("/incidents/{id:long}/reopen", (long id, IncidentRepository repo, ClaimsPrincipal user) =>
             ToResult(repo.ReopenIncident(id, UserName(user)), ToDto));
 
+        // « Supprimer l'incident » : mise en CORBEILLE (pas de suppression physique).
         api.MapDelete("/incidents/{id:long}", (long id, IncidentRepository repo, ClaimsPrincipal user) =>
             ToResult(repo.TrashIncident(id, UserName(user)), ToDto));
 
+        // Journal d'audit de l'incident.
         api.MapGet("/incidents/{id:long}/audit", (long id, IncidentRepository repo) =>
             repo.GetIncident(id) is null ? Results.NotFound(new { error = "Incident introuvable." }) : Results.Ok(repo.ListAudit(id)));
 
+        // Export CSV des personnes présentes (ouvrable directement dans Excel).
         api.MapGet("/incidents/{id:long}/export.csv", (long id, IncidentRepository repo) =>
         {
             var incident = repo.GetIncident(id);
             if (incident is null) return Results.NotFound(new { error = "Incident introuvable." });
             var csv = BuildCsv(incident, repo.ListPersons(id).Where(p => p.RemovedAt is null));
             var fileName = $"comptage-incident-{incident.Id}-{DateTime.Now:yyyyMMdd-HHmm}.csv";
+            // Préambule UTF-8 (BOM) : indispensable pour qu'Excel affiche correctement les accents.
             return Results.File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(), "text/csv; charset=utf-8", fileName);
         });
 
-        // ------------------------------------------------------------ Corbeille
-
+        // -------------------------------------------------------------------------------- Corbeille
+        // Incidents en corbeille + date à laquelle chacun sera supprimé définitivement.
         api.MapGet("/trash", (IncidentRepository repo) =>
             repo.ListTrash().Select(i => new
             {
@@ -91,11 +130,15 @@ public static class ApiEndpoints
                 purgeAt = i.DeletedAt!.Value + repo.Retention,
             }));
 
+        // Restauration (refusée si le délai de rétention est dépassé).
         api.MapPost("/trash/{id:long}/restore", (long id, IncidentRepository repo, ClaimsPrincipal user) =>
             ToResult(repo.RestoreIncident(id, UserName(user)), ToDto));
 
-        // ------------------------------------------------------------ Personnes
-
+        // -------------------------------------------------------------------------------- Personnes
+        // Ajout d'une personne interne, à partir d'une suggestion de l'annuaire.
+        // Remarque : les données transmises (nom, prénom, service) sont celles de la suggestion affichée.
+        // Le serveur ne réinterroge pas l'annuaire, afin que l'ajout reste possible et rapide même si l'AD
+        // ralentit pendant un incident. L'identifiant (login) sert de clé anti-doublon.
         api.MapPost("/incidents/{id:long}/persons/internal", (long id, AddInternalRequest req, IncidentRepository repo, ClaimsPrincipal user) =>
         {
             var login = req.Login?.Trim();
@@ -105,6 +148,7 @@ public static class ApiEndpoints
                 p => p, created: true);
         });
 
+        // Ajout d'un visiteur (saisie manuelle du nom complet, 2 caractères minimum).
         api.MapPost("/incidents/{id:long}/persons/visitor", (long id, AddVisitorRequest req, IncidentRepository repo, ClaimsPrincipal user) =>
         {
             var name = req.FullName?.Trim();
@@ -113,14 +157,17 @@ public static class ApiEndpoints
             return ToResult(repo.AddVisitor(id, new NewVisitor(name, req.Company), UserName(user)), p => p, created: true);
         });
 
+        // « Supprimer » une personne : retrait LOGIQUE (réintégrable).
         api.MapDelete("/incidents/{id:long}/persons/{personId:long}", (long id, long personId, IncidentRepository repo, ClaimsPrincipal user) =>
             ToResult(repo.RemovePerson(id, personId, UserName(user)), p => p));
 
+        // Réintégration d'une personne retirée.
         api.MapPost("/incidents/{id:long}/persons/{personId:long}/restore", (long id, long personId, IncidentRepository repo, ClaimsPrincipal user) =>
             ToResult(repo.RestorePerson(id, personId, UserName(user)), p => p));
 
-        // ------------------------------------------------------------ Annuaire
-
+        // -------------------------------------------------------------------------------- Annuaire
+        // Recherche de suggestions. La longueur minimale (4 par défaut) est contrôlée ICI aussi, et pas
+        // seulement dans l'interface : un appel direct à l'API ne peut pas lancer de recherche trop large.
         api.MapGet("/directory/search", async (string? q, IDirectoryService directory, IOptions<DirectoryOptions> options,
             ILoggerFactory loggerFactory, CancellationToken ct) =>
         {
@@ -134,16 +181,29 @@ public static class ApiEndpoints
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // Détail technique dans le journal serveur ; message générique et solution de repli pour l'utilisateur.
                 loggerFactory.CreateLogger("Directory").LogError(ex, "Recherche annuaire impossible");
-                return Results.Json(new { error = "Annuaire indisponible. Utilisez « Ajouter manuellement » en attendant." },
+                return Results.Json(new { error = "Annuaire indisponible. Utilisez « Ajouter un visiteur » en attendant." },
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
         });
     }
 
     /// <summary>
-    /// Les identifiants Windows étant envoyés automatiquement par le navigateur, toute requête qui modifie des données
-    /// doit porter un en-tête personnalisé (impossible à poser depuis un autre site sans préflight CORS).
+    /// Protection contre la falsification de requête inter-sites (CSRF).
+    /// <para>
+    /// Le risque : le navigateur envoie AUTOMATIQUEMENT l'identité Windows à l'application. Un site
+    /// malveillant visité par un agent pourrait donc tenter de déclencher, à son insu, une requête de
+    /// modification (ex. supprimer un incident) vers l'application.
+    /// </para>
+    /// <para>
+    /// La parade : toute requête /api autre que GET/HEAD/OPTIONS doit porter l'en-tête
+    /// « X-Requested-With: ComptageIncident ». Un autre site ne peut pas ajouter d'en-tête personnalisé
+    /// à une requête vers notre domaine sans une autorisation CORS préalable (« preflight ») ; or
+    /// l'application n'autorise AUCUNE origine externe (pas de configuration CORS). La requête
+    /// malveillante est donc soit bloquée par le navigateur, soit envoyée sans l'en-tête, et rejetée ici (400).
+    /// </para>
+    /// Les requêtes GET n'ont pas besoin de cette protection car elles ne modifient rien.
     /// </summary>
     public static IApplicationBuilder UseCsrfHeaderCheck(this IApplicationBuilder app) => app.Use(async (ctx, next) =>
     {
@@ -158,18 +218,26 @@ public static class ApiEndpoints
         await next();
     });
 
+    /// <summary>
+    /// Identité de l'utilisateur telle qu'établie par l'authentification Windows (DOMAINE\login).
+    /// Elle est enregistrée dans chaque ligne créée/modifiée et dans le journal d'audit.
+    /// </summary>
     private static string UserName(ClaimsPrincipal user) => user.Identity?.Name ?? "inconnu";
 
+    /// <summary>Forme JSON d'un incident (inclut les compteurs calculés).</summary>
     private static object ToDto(Incident i) => new
     {
         i.Id, i.Title, i.Type, i.Location, i.CreatedAt, i.CreatedBy, i.ClosedAt, i.ClosedBy, i.DeletedAt, i.DeletedBy,
         i.InternalCount, i.VisitorCount, i.TotalCount, i.IsClosed,
     };
 
+    /// <summary>Réponse 400 avec message.</summary>
     private static IResult Problem(string error) => Results.BadRequest(new { error });
 
+    /// <summary>Limite de 256 caractères par champ texte (évite le stockage de contenus démesurés).</summary>
     private static bool TooLong(params string?[] values) => values.Any(v => v?.Length > 256);
 
+    /// <summary>Traduit un OpResult métier en réponse HTTP (voir le tableau en tête de fichier).</summary>
     private static IResult ToResult<T>(OpResult<T> result, Func<T, object> map, bool created = false) => result.Status switch
     {
         OpStatus.Ok when created => Results.Json(map(result.Value!), statusCode: StatusCodes.Status201Created),
@@ -178,6 +246,10 @@ public static class ApiEndpoints
         _ => Results.Conflict(new { error = result.Error }),
     };
 
+    /// <summary>
+    /// Produit le fichier CSV : un en-tête récapitulatif (incident, totaux), puis une ligne par personne
+    /// présente (internes puis visiteurs, chacun par ordre alphabétique). Séparateur « ; » (Excel français).
+    /// </summary>
     private static string BuildCsv(Incident incident, IEnumerable<Person> persons)
     {
         var fr = CultureInfo.GetCultureInfo("fr-FR");
@@ -207,10 +279,16 @@ public static class ApiEndpoints
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Prépare une valeur pour le CSV :
+    ///  - Protection contre l'injection de formules : une valeur commençant par = + - @ (ou tabulation /
+    ///    retour chariot) serait interprétée comme une formule par Excel ; on la préfixe d'une apostrophe.
+    ///    Exemple : un visiteur nommé « =HYPERLINK(...) » s'affiche comme du texte.
+    ///  - Les valeurs contenant ; " ou un saut de ligne sont entourées de guillemets (guillemets doublés).
+    /// </summary>
     private static string Csv(string? value)
     {
         if (string.IsNullOrEmpty(value)) return "";
-        // Neutralise les formules Excel (injection CSV).
         if ("=+-@\t\r".Contains(value[0])) value = "'" + value;
         return value.IndexOfAny([';', '"', '\n', '\r']) >= 0 ? $"\"{value.Replace("\"", "\"\"")}\"" : value;
     }

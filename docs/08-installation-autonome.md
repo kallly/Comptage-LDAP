@@ -67,7 +67,8 @@ Dans ce cas, **l'annuaire est interrogé avec le compte de l'utilisateur de la s
 L'exe ne contient pas l'interface. Celle-ci est un **dossier de fichiers** livré à côté de lui par la publication :
 
 ```
-C:\Apps\ComptageIncident  ComptageIncident.exe        lanceur (démarre le runtime .NET et ComptageIncident.dll)
+C:\Apps\ComptageIncident\
+  ComptageIncident.exe        lanceur (démarre le runtime .NET et ComptageIncident.dll)
   ComptageIncident.dll        l'application (API, authentification, règles métier)
   *.dll, e_sqlite3.dll        dépendances (dont le moteur SQLite)
   appsettings.json            configuration

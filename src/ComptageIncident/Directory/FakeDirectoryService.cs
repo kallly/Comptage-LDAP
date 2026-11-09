@@ -18,23 +18,23 @@ namespace ComptageIncident.Directory;
 /// <summary>Annuaire fictif pour le développement et les tests (hors domaine Windows).</summary>
 public sealed class FakeDirectoryService : IDirectoryService
 {
-    /// <summary>Personnes fictives (prénom, nom, service).</summary>
-    private static readonly (string First, string Last, string Dept)[] People =
+    /// <summary>Personnes fictives (prénom, nom).</summary>
+    private static readonly (string First, string Last)[] People =
     [
-        ("Jean", "Dupont", "Production"), ("Marie", "Dupond", "Qualité"), ("Pierre", "Martin", "Maintenance"),
-        ("Sophie", "Bernard", "RH"), ("Luc", "Thomas", "Logistique"), ("Julie", "Petit", "Production"),
-        ("Nicolas", "Robert", "Informatique"), ("Camille", "Richard", "Laboratoire"), ("Antoine", "Durand", "Sécurité"),
-        ("Émilie", "Dubois", "Comptabilité"), ("Hugo", "Moreau", "Maintenance"), ("Léa", "Laurent", "Achats"),
-        ("Thomas", "Simon", "Production"), ("Chloé", "Michel", "Laboratoire"), ("Maxime", "Lefèvre", "Logistique"),
-        ("Manon", "Leroy", "Qualité"), ("Julien", "Roux", "Informatique"), ("Sarah", "David", "Direction"),
-        ("Alexandre", "Bertrand", "Production"), ("Laura", "Morel", "RH"), ("Romain", "Fournier", "Sécurité"),
-        ("Pauline", "Girard", "Laboratoire"), ("Kevin", "Bonnet", "Maintenance"), ("Céline", "Dupuis", "Achats"),
-        ("Mathieu", "Lambert", "Production"), ("Anaïs", "Fontaine", "Qualité"), ("Sébastien", "Rousseau", "Logistique"),
-        ("Clara", "Vincent", "Comptabilité"), ("François", "Muller", "Production"), ("Inès", "Lefebvre", "Informatique"),
-        ("Benoît", "Faure", "Maintenance"), ("Océane", "André", "Laboratoire"), ("Damien", "Mercier", "Sécurité"),
-        ("Jeanne", "Blanc", "Direction"), ("Yann", "Guérin", "Production"), ("Élodie", "Boyer", "RH"),
-        ("Jean-Pierre", "Garnier", "Maintenance"), ("Marie-Claire", "Chevalier", "Qualité"), ("Olivier", "François", "Logistique"),
-        ("Jeannine", "Dupontel", "Production"),
+        ("Jean", "Dupont"), ("Marie", "Dupond"), ("Pierre", "Martin"),
+        ("Sophie", "Bernard"), ("Luc", "Thomas"), ("Julie", "Petit"),
+        ("Nicolas", "Robert"), ("Camille", "Richard"), ("Antoine", "Durand"),
+        ("Émilie", "Dubois"), ("Hugo", "Moreau"), ("Léa", "Laurent"),
+        ("Thomas", "Simon"), ("Chloé", "Michel"), ("Maxime", "Lefèvre"),
+        ("Manon", "Leroy"), ("Julien", "Roux"), ("Sarah", "David"),
+        ("Alexandre", "Bertrand"), ("Laura", "Morel"), ("Romain", "Fournier"),
+        ("Pauline", "Girard"), ("Kevin", "Bonnet"), ("Céline", "Dupuis"),
+        ("Mathieu", "Lambert"), ("Anaïs", "Fontaine"), ("Sébastien", "Rousseau"),
+        ("Clara", "Vincent"), ("François", "Muller"), ("Inès", "Lefebvre"),
+        ("Benoît", "Faure"), ("Océane", "André"), ("Damien", "Mercier"),
+        ("Jeanne", "Blanc"), ("Yann", "Guérin"), ("Élodie", "Boyer"),
+        ("Jean-Pierre", "Garnier"), ("Marie-Claire", "Chevalier"), ("Olivier", "François"),
+        ("Jeannine", "Dupontel"),
     ];
 
     private readonly int _maxResults;
@@ -58,7 +58,6 @@ public sealed class FakeDirectoryService : IDirectoryService
                 FirstName: p.First,
                 LastName: p.Last,
                 DisplayName: $"{p.Last.ToUpperInvariant()} {p.First}",
-                Department: p.Dept,
                 Email: $"{Normalize(p.First)}.{Normalize(p.Last)}@exemple.local"))
             .ToList();
         return Task.FromResult(result);

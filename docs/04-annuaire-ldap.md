@@ -32,10 +32,9 @@ Liste exhaustive, définie par la constante `Properties` dans `AdDirectoryServic
 | `givenName` | Prénom | Oui |
 | `sn` | Nom | Oui |
 | `displayName` | Nom affiché | Oui |
-| `department` | Service (affiché pour distinguer les homonymes) | Oui |
 | `mail` | Renvoyé à l'interface, non affiché | **Non** |
 
-Aucun autre attribut n'est demandé : ni groupes, ni téléphone, ni mot de passe, ni attribut sensible.
+Aucun autre attribut n'est demandé : ni service, ni société, ni groupes, ni téléphone, ni mot de passe, ni attribut sensible. Pour distinguer deux homonymes, les suggestions affichent l'**identifiant Windows** sous le nom.
 
 ## Construction de la recherche
 
@@ -96,7 +95,7 @@ Avec la liste blanche (`NameRules`), ces caractères ne peuvent d'ailleurs **plu
 
 ## Ajout d'une personne interne
 
-Quand l'agent clique sur une suggestion, l'interface envoie au serveur les informations **de la suggestion affichée** : identifiant, nom, prénom, nom affiché, service. Le serveur **ne réinterroge pas** l'annuaire. C'est un choix volontaire : l'ajout reste instantané même si l'AD ralentit pendant un incident.
+Quand l'agent clique sur une suggestion, l'interface envoie au serveur les informations **de la suggestion affichée** : identifiant, nom, prénom, nom affiché. Le serveur **ne réinterroge pas** l'annuaire. C'est un choix volontaire : l'ajout reste instantané même si l'AD ralentit pendant un incident.
 
 Conséquence pour l'audit : un utilisateur authentifié qui appellerait l'API directement pourrait enregistrer un « interne » avec un nom arbitraire. C'est sans impact de sécurité, car il pourrait aussi bien saisir un visiteur. L'action reste **tracée à son nom** dans le journal.
 

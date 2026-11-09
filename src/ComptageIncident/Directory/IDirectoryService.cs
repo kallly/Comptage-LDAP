@@ -15,14 +15,12 @@ namespace ComptageIncident.Directory;
 /// <param name="FirstName">Prénom (givenName).</param>
 /// <param name="LastName">Nom (sn).</param>
 /// <param name="DisplayName">Nom affiché (displayName).</param>
-/// <param name="Department">Service (department).</param>
 /// <param name="Email">Adresse e-mail (mail), non stockée en base.</param>
 public sealed record DirectoryPerson(
     string Login,
     string? FirstName,
     string? LastName,
     string DisplayName,
-    string? Department,
     string? Email);
 
 public interface IDirectoryService

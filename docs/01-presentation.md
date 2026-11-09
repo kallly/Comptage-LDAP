@@ -18,7 +18,7 @@ Lors d'un incident sur site (incendie, fuite de produit chimique, exercice d'év
 | Recherche des personnes dans le LDAP par nom ou prénom | Suggestions à partir de **4 caractères**, chaque mot devant commencer le nom ou le prénom ([04](04-annuaire-ldap.md)) |
 | Un clic ajoute la personne, avec popup de validation | Popup « Ajouter cette personne ? » avant tout ajout |
 | Bouton Supprimer avec popup de validation | Popup « Retirer cette personne ? ». La personne reste réintégrable en cas d'erreur |
-| Bouton d'ajout supplémentaire pour les visiteurs (nom complet saisi) | Bouton « + Ajouter un visiteur » : nom complet obligatoire, société facultative, puis confirmation |
+| Bouton d'ajout supplémentaire pour les visiteurs (nom complet saisi) | Bouton « + Ajouter un visiteur » : nom complet uniquement, puis confirmation |
 | Listes triées par ordre alphabétique, internes et visiteurs séparés | Deux listes distinctes, triées par nom puis prénom, sans tenir compte des accents ni de la casse |
 | Nombre total de chaque liste affiché | Total des internes, total des visiteurs et total général |
 | Pas de bouton qui efface tout par erreur | **Aucune** fonction « tout effacer ». Plusieurs incidents sont conservés dans une base SQLite locale |

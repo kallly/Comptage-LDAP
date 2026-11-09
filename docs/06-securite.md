@@ -80,7 +80,7 @@ Expression régulière (`Api/NameRules.cs`) :
 Une seconde expression exige **au moins une lettre**. La saisie est d'abord **recomposée en forme NFC**, car certains claviers envoient « é » en deux caractères (e + accent combinant). Sans cela, ces noms seraient refusés à tort.
 
 Périmètre volontairement limité aux **noms saisis** :
-- **non appliquée** à la société d'un visiteur ni au titre ou au lieu d'un incident, où chiffres et ponctuation sont légitimes (« 3M », « Bât. B2 ») ;
+- **non appliquée** au titre ni au lieu d'un incident, où chiffres et ponctuation sont légitimes (« Bât. B2 ») ;
 - **non appliquée** aux noms venant de l'annuaire : refuser un collègue réel pendant une évacuation à cause d'un caractère inattendu dans l'AD serait plus grave que le risque couvert.
 
 Ces champs restent protégés par S6 (SQL paramétré), S8 (affichage en `textContent`) et S9 (CSV).

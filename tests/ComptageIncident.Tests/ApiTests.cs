@@ -90,12 +90,12 @@ public sealed class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var id = await CreateIncident(client);
 
         var add = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/internal",
-            new { login = "jdupont", firstName = "Jean", lastName = "Dupont", department = "Production" });
+            new { login = "jdupont", firstName = "Jean", lastName = "Dupont" });
         Assert.Equal(HttpStatusCode.Created, add.StatusCode);
         var dup = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/internal", new { login = "jdupont" });
         Assert.Equal(HttpStatusCode.Conflict, dup.StatusCode);
 
-        var visitor = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "Paul Durand", company = "ACME" });
+        var visitor = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "Paul Durand" });
         Assert.Equal(HttpStatusCode.Created, visitor.StatusCode);
         var visitorId = (await visitor.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
 

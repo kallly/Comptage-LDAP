@@ -161,9 +161,9 @@ public sealed class DataSecurityTests(ApiFactory factory) : IClassFixture<ApiFac
     public async Task L_export_CSV_neutralise_les_formules_Excel()
     {
         var client = Client();
-        var created = await client.PostAsJsonAsync("/api/incidents", new { title = "+33 standard", type = "Autre" });
+        // Champs libres repris dans le CSV : titre et lieu de l'incident.
+        var created = await client.PostAsJsonAsync("/api/incidents", new { title = "+33 standard", type = "Autre", location = "=HYPERLINK(\"http://x\")" });
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
-        await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName = "Paul Durand", company = "=HYPERLINK(\"http://x\")" });
 
         var csv = await client.GetStringAsync($"/api/incidents/{id}/export.csv");
 

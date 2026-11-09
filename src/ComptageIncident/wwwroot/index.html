@@ -81,7 +81,7 @@
     </form>
   </dialog>
 
-  <!-- Ajout d'un visiteur (ou de toute personne absente de l'annuaire) : nom complet obligatoire, société facultative. -->
+  <!-- Ajout d'un visiteur (ou de toute personne absente de l'annuaire) : nom complet uniquement. -->
   <dialog id="visitor-dialog" class="dialog">
     <form id="visitor-form" method="dialog">
       <h2>Ajouter un visiteur / une personne hors annuaire</h2>
@@ -89,9 +89,6 @@
         <label>Nom complet
           <input name="fullName" required minlength="2" maxlength="256" placeholder="ex. Paul DURAND" autocomplete="off">
           <span class="muted field-help">Lettres (accents compris), espace, apostrophe et trait d'union.</span>
-        </label>
-        <label>Société <span class="muted">(optionnel)</span>
-          <input name="company" maxlength="256" placeholder="ex. Entreprise extérieure" autocomplete="off">
         </label>
       </div>
       <div class="dialog-actions">

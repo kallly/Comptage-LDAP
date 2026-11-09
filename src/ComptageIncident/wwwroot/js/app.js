@@ -452,10 +452,7 @@
             h('li', { class: p.id === flashId ? 'flash' : null },
               h('div', {},
                 h('div', { class: 'name', text: personName(p) }),
-                h('div', { class: 'detail', text: [
-                  p.kind === 'internal' ? p.department : p.company,
-                  `ajouté à ${fmtTime(p.addedAt)} par ${p.addedBy}`,
-                ].filter(Boolean).join(' · ') })),
+                h('div', { class: 'detail', text: `ajouté à ${fmtTime(p.addedAt)} par ${p.addedBy}` })),
               readOnly ? h('span') : h('button', { class: 'btn btn-sm btn-danger', type: 'button', onclick: () => removePerson(p) }, 'Supprimer'))))
           : h('div', { class: 'empty', text: emptyText }));
     }
@@ -491,8 +488,8 @@
       const ok = await confirmDialog({
         title: 'Ajouter cette personne ?',
         body: [h('p', { class: 'highlight', text: personName(person) }),
-          person.department ? h('p', { class: 'muted', text: person.department }) : null,
-          'Confirmer la présence de cette personne ?'].filter(Boolean),
+          h('p', { class: 'muted', text: person.login }),
+          'Confirmer la présence de cette personne ?'],
         okText: 'Ajouter',
       });
       if (!ok) {
@@ -505,7 +502,7 @@
       try {
         const added = await api('POST', `/api/incidents/${id}/persons/internal`, {
           login: person.login, firstName: person.firstName, lastName: person.lastName,
-          displayName: person.displayName, department: person.department,
+          displayName: person.displayName,
         });
         toast(`${personName(added)} ajouté(e).`, 'ok');
         flashId = added.id;
@@ -516,7 +513,7 @@
       searchInput.focus(); // prêt pour la personne suivante
     }
 
-    /** Ajout d'un visiteur : formulaire (nom complet + société), popup de confirmation, puis appel API. */
+    /** Ajout d'un visiteur : formulaire (nom complet), popup de confirmation, puis appel API. */
     function addVisitor() {
       // Contrôle du nom pendant la frappe : un nom invalide bloque la validation du formulaire
       // (message natif du navigateur sous le champ), la popup reste ouverte pour corriger.
@@ -527,15 +524,14 @@
       };
       openFormDialog($('#visitor-dialog'), async (values) => {
         const fullName = normalizeName(values.fullName).replace(/\s+/g, ' ');
-        const company = (values.company || '').trim();
         const ok = await confirmDialog({
           title: 'Ajouter ce visiteur ?',
-          body: [h('p', { class: 'highlight', text: fullName }), company ? h('p', { class: 'muted', text: company }) : null].filter(Boolean),
+          body: [h('p', { class: 'highlight', text: fullName })],
           okText: 'Ajouter',
         });
         if (!ok) return;
         try {
-          const added = await api('POST', `/api/incidents/${id}/persons/visitor`, { fullName, company });
+          const added = await api('POST', `/api/incidents/${id}/persons/visitor`, { fullName });
           toast(`${added.displayName} ajouté(e) aux visiteurs.`, 'ok');
           flashId = added.id;
           await refresh();
@@ -639,7 +635,7 @@
           role: 'option', id: `sugg-${index}`, 'data-login': p.login, class: [already ? 'disabled' : '', index === active ? 'active' : ''].join(' ').trim() || null,
           'aria-disabled': already ? 'true' : null, 'aria-selected': index === active ? 'true' : 'false',
         },
-        h('span', { class: 'who' }, h('b', { text: personName(p) }), h('small', { text: [p.department, p.login].filter(Boolean).join(' · ') })),
+        h('span', { class: 'who' }, h('b', { text: personName(p) }), h('small', { text: p.login })),
         already ? h('span', { class: 'badge badge-closed', text: 'déjà comptée' }) : null);
         li.addEventListener('mousedown', (e) => e.preventDefault()); // garde le focus dans le champ pendant le clic
         // L'état « déjà comptée » est vérifié AU MOMENT du clic (il a pu changer depuis l'affichage).

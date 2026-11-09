@@ -40,12 +40,12 @@ Base : `/api`. Format : JSON (UTF-8), propriétés en *camelCase*. Implémentati
 {
   "id": 12, "incidentId": 1, "kind": "internal",
   "displayName": "DUPONT Jean", "lastName": "Dupont", "firstName": "Jean",
-  "login": "jdupont", "department": "Production", "company": null,
+  "login": "jdupont",
   "addedAt": "2026-11-09T22:18:02.101Z", "addedBy": "ENTREPRISE\\mmartin",
   "removedAt": null, "removedBy": null
 }
 ```
-Pour un visiteur : `kind` vaut `"visitor"` ; `lastName`, `firstName`, `login` et `department` valent `null` ; `company` est éventuellement renseigné.
+Pour un visiteur : `kind` vaut `"visitor"`, `displayName` contient le nom complet saisi, et `lastName`, `firstName`, `login` valent `null`.
 
 ## Routes
 
@@ -80,8 +80,8 @@ Pour un visiteur : `kind` vaut `"visitor"` ; `lastName`, `firstName`, `login` et
 
 | Méthode | Route | Corps | Réponses |
 |---|---|---|---|
-| POST | `/api/incidents/{id}/persons/internal` | `{ "login": "jdupont", "firstName": "Jean", "lastName": "Dupont", "displayName": "DUPONT Jean", "department": "Production" }` (seul `login` est obligatoire) | `201` Personne ; `400` login manquant ou champ > 256 ; `404` ; `409` déjà comptée ou incident clôturé |
-| POST | `/api/incidents/{id}/persons/visitor` | `{ "fullName": "Paul Durand", "company": "ACME" }` | `201` Personne ; `400` nom < 2 caractères, champ > 256, ou **caractère non autorisé dans le nom** (seuls lettres, accents, espace, `'`, `’`, `-`) ; `404` ; `409` incident clôturé |
+| POST | `/api/incidents/{id}/persons/internal` | `{ "login": "jdupont", "firstName": "Jean", "lastName": "Dupont", "displayName": "DUPONT Jean" }` (seul `login` est obligatoire) | `201` Personne ; `400` login manquant ou champ > 256 ; `404` ; `409` déjà comptée ou incident clôturé |
+| POST | `/api/incidents/{id}/persons/visitor` | `{ "fullName": "Paul Durand" }` | `201` Personne ; `400` nom < 2 caractères, champ > 256, ou **caractère non autorisé dans le nom** (seuls lettres, accents, espace, `'`, `’`, `-`) ; `404` ; `409` incident clôturé |
 | DELETE | `/api/incidents/{id}/persons/{personId}` | — | `200` Personne (avec `removedAt`), **retrait logique** ; `404` (personne absente, déjà retirée ou d'un autre incident) ; `409` incident clôturé |
 | POST | `/api/incidents/{id}/persons/{personId}/restore` | — | `200` Personne ; `404` ; `409` de nouveau comptée entre-temps, ou incident clôturé |
 
@@ -89,7 +89,7 @@ Pour un visiteur : `kind` vaut `"visitor"` ; `lastName`, `firstName`, `login` et
 
 | Méthode | Route | Réponses |
 |---|---|---|
-| GET | `/api/directory/search?q=dupo jea` | `200` `[{ "login", "firstName", "lastName", "displayName", "department", "email" }]` (20 au plus) ; `400` si moins de 4 ou plus de 100 caractères, ou **caractère non autorisé** (seuls lettres, accents, espace, `'`, `’`, `-`) ; `503` annuaire indisponible |
+| GET | `/api/directory/search?q=dupo jea` | `200` `[{ "login", "firstName", "lastName", "displayName", "email" }]` (20 au plus) ; `400` si moins de 4 ou plus de 100 caractères, ou **caractère non autorisé** (seuls lettres, accents, espace, `'`, `’`, `-`) ; `503` annuaire indisponible |
 
 ## Exemple d'appel en PowerShell
 

@@ -102,7 +102,7 @@ public sealed class NameRulesApiTests(ApiFactory factory) : IClassFixture<ApiFac
         var created = await client.PostAsJsonAsync("/api/incidents", new { title = "Visiteurs", type = "Exercice" });
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt64();
 
-        var response = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName, company = "3M S.A." });
+        var response = await client.PostAsJsonAsync($"/api/incidents/{id}/persons/visitor", new { fullName });
 
         Assert.Equal(expected, response.StatusCode);
     }

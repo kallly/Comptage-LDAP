@@ -41,8 +41,8 @@ public static class ApiEndpoints
     // Corps JSON attendus. Tous les champs sont « nullable » : la validation est faite explicitement ci-dessous
     // pour renvoyer des messages en français plutôt qu'une erreur technique de désérialisation.
     public sealed record CreateIncidentRequest(string? Title, string? Type, string? Location);
-    public sealed record AddInternalRequest(string? Login, string? FirstName, string? LastName, string? DisplayName, string? Department);
-    public sealed record AddVisitorRequest(string? FullName, string? Company);
+    public sealed record AddInternalRequest(string? Login, string? FirstName, string? LastName, string? DisplayName);
+    public sealed record AddVisitorRequest(string? FullName);
 
     /// <summary>Déclare toutes les routes de l'API.</summary>
     public static void MapApi(this WebApplication app)
@@ -137,15 +137,15 @@ public static class ApiEndpoints
 
         // -------------------------------------------------------------------------------- Personnes
         // Ajout d'une personne interne, à partir d'une suggestion de l'annuaire.
-        // Remarque : les données transmises (nom, prénom, service) sont celles de la suggestion affichée.
+        // Remarque : les données transmises (identifiant, nom, prénom) sont celles de la suggestion affichée.
         // Le serveur ne réinterroge pas l'annuaire, afin que l'ajout reste possible et rapide même si l'AD
         // ralentit pendant un incident. L'identifiant (login) sert de clé anti-doublon.
         api.MapPost("/incidents/{id:long}/persons/internal", (long id, AddInternalRequest req, IncidentRepository repo, ClaimsPrincipal user) =>
         {
             var login = req.Login?.Trim();
             if (string.IsNullOrEmpty(login) || login.Length > 256) return Problem("Identifiant de la personne manquant ou invalide.");
-            if (TooLong(req.FirstName, req.LastName, req.DisplayName, req.Department)) return Problem("Champ trop long.");
-            return ToResult(repo.AddInternal(id, new NewInternalPerson(login, req.FirstName, req.LastName, req.DisplayName, req.Department), UserName(user)),
+            if (TooLong(req.FirstName, req.LastName, req.DisplayName)) return Problem("Champ trop long.");
+            return ToResult(repo.AddInternal(id, new NewInternalPerson(login, req.FirstName, req.LastName, req.DisplayName), UserName(user)),
                 p => p, created: true);
         });
 
@@ -155,9 +155,9 @@ public static class ApiEndpoints
         {
             var name = NameRules.Normalize(req.FullName);
             if (name.Length < 2) return Problem("Le nom complet du visiteur est obligatoire.");
-            if (TooLong(name, req.Company)) return Problem("Champ trop long.");
+            if (TooLong(name)) return Problem("Champ trop long.");
             if (!NameRules.IsValid(name)) return Problem($"Nom invalide : seuls les caractères suivants sont acceptés : {NameRules.AllowedDescription}.");
-            return ToResult(repo.AddVisitor(id, new NewVisitor(name, req.Company), UserName(user)), p => p, created: true);
+            return ToResult(repo.AddVisitor(id, new NewVisitor(name), UserName(user)), p => p, created: true);
         });
 
         // « Supprimer » une personne : retrait LOGIQUE (réintégrable).
@@ -272,7 +272,7 @@ public static class ApiEndpoints
         sb.AppendLine($"Visiteurs;{incident.VisitorCount}");
         sb.AppendLine($"Total;{incident.TotalCount}");
         sb.AppendLine();
-        sb.AppendLine("Catégorie;Nom;Prénom;Nom affiché;Identifiant;Service / Société;Ajouté le;Ajouté par");
+        sb.AppendLine("Catégorie;Nom;Prénom;Nom affiché;Identifiant;Ajouté le;Ajouté par");
         var ordered = persons
             .OrderBy(p => p.Kind == PersonKinds.Internal ? 0 : 1)
             .ThenBy(p => p.LastName ?? p.DisplayName, cmp)
@@ -282,7 +282,6 @@ public static class ApiEndpoints
             sb.AppendLine(string.Join(';',
                 p.Kind == PersonKinds.Internal ? "Interne" : "Visiteur",
                 Csv(p.LastName), Csv(p.FirstName), Csv(p.DisplayName), Csv(p.Login),
-                Csv(p.Kind == PersonKinds.Internal ? p.Department : p.Company),
                 p.AddedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm", fr), Csv(p.AddedBy)));
         }
         return sb.ToString();

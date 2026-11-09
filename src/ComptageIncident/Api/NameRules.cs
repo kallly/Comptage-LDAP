@@ -5,8 +5,7 @@
 //    - la recherche dans l'annuaire (GET /api/directory/search?q=…) ;
 //    - le nom complet d'un visiteur (POST /api/incidents/{id}/persons/visitor).
 //  Ne s'applique PAS :
-//    - à la société du visiteur ni au titre / lieu de l'incident (chiffres et ponctuation légitimes :
-//      « 3M », « Bât. B2 ») ;
+//    - au titre / lieu de l'incident (chiffres et ponctuation légitimes : « Bât. B2 ») ;
 //    - aux noms provenant de l'annuaire (ils ne sont pas saisis, et refuser un collègue réel pendant une
 //      évacuation à cause d'un caractère inattendu dans l'AD serait plus grave que le risque couvert).
 //

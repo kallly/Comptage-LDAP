@@ -203,7 +203,7 @@ public sealed class IncidentRepository
     // =================================================================================================
 
     private const string PersonSelect = """
-        SELECT Id, IncidentId, Kind, DisplayName, LastName, FirstName, Login, Department, Company, AddedAt, AddedBy, RemovedAt, RemovedBy
+        SELECT Id, IncidentId, Kind, DisplayName, LastName, FirstName, Login, AddedAt, AddedBy, RemovedAt, RemovedBy
         FROM Persons
         """;
 
@@ -243,12 +243,12 @@ public sealed class IncidentRepository
         try
         {
             id = Scalar<long>(conn, """
-                INSERT INTO Persons (IncidentId, Kind, DisplayName, LastName, FirstName, Login, Department, AddedAt, AddedBy)
-                VALUES ($inc, 'internal', $display, $last, $first, $login, $dept, $now, $user);
+                INSERT INTO Persons (IncidentId, Kind, DisplayName, LastName, FirstName, Login, AddedAt, AddedBy)
+                VALUES ($inc, 'internal', $display, $last, $first, $login, $now, $user);
                 SELECT last_insert_rowid();
                 """,
                 ("$inc", incidentId), ("$display", display), ("$last", last), ("$first", first), ("$login", login),
-                ("$dept", Clean(p.Department)), ("$now", Fmt(Now)), ("$user", user));
+                ("$now", Fmt(Now)), ("$user", user));
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // 19 = SQLITE_CONSTRAINT (index unique)
         {
@@ -260,25 +260,24 @@ public sealed class IncidentRepository
     }
 
     /// <summary>
-    /// Ajoute un visiteur (saisie manuelle). Pas de contrôle de doublon : deux visiteurs peuvent porter
-    /// le même nom. Les espaces multiples sont normalisés (« Paul   Durand » → « Paul Durand »).
+    /// Ajoute un visiteur (saisie manuelle du nom complet). Pas de contrôle de doublon : deux visiteurs
+    /// peuvent porter le même nom. Les espaces multiples sont normalisés (« Paul   Durand » → « Paul Durand »).
     /// </summary>
     public OpResult<Person> AddVisitor(long incidentId, NewVisitor v, string user)
     {
         var name = Clean(v.FullName)!;
-        var company = Clean(v.Company);
         using var conn = _db.Open();
         using var tx = conn.BeginTransaction();
         var check = CheckWritable(conn, incidentId);
         if (check is { } failure) return Fail<Person>(failure);
 
         var id = Scalar<long>(conn, """
-            INSERT INTO Persons (IncidentId, Kind, DisplayName, Company, AddedAt, AddedBy)
-            VALUES ($inc, 'visitor', $name, $company, $now, $user);
+            INSERT INTO Persons (IncidentId, Kind, DisplayName, AddedAt, AddedBy)
+            VALUES ($inc, 'visitor', $name, $now, $user);
             SELECT last_insert_rowid();
             """,
-            ("$inc", incidentId), ("$name", name), ("$company", company), ("$now", Fmt(Now)), ("$user", user));
-        Audit(conn, incidentId, user, "Ajout visiteur", name + (company is null ? "" : $" ({company})"));
+            ("$inc", incidentId), ("$name", name), ("$now", Fmt(Now)), ("$user", user));
+        Audit(conn, incidentId, user, "Ajout visiteur", name);
         tx.Commit();
         return OpResult<Person>.Ok(GetPerson(conn, id)!);
     }
@@ -339,9 +338,9 @@ public sealed class IncidentRepository
     private static Person? GetPerson(SqliteConnection conn, long id) =>
         Query(conn, PersonSelect + " WHERE Id = $id", ReadPerson, ("$id", id)).FirstOrDefault();
 
-    /// <summary>Libellé utilisé dans le journal : « NOM Prénom (login) » ou « Nom (société) ».</summary>
+    /// <summary>Libellé utilisé dans le journal : « NOM Prénom (login) » pour un interne, nom complet pour un visiteur.</summary>
     private static string Describe(Person p) =>
-        p.DisplayName + (p.Login is not null ? $" ({p.Login})" : p.Company is not null ? $" ({p.Company})" : "");
+        p.DisplayName + (p.Login is not null ? $" ({p.Login})" : "");
 
     /// <summary>
     /// Vérifie qu'on peut modifier les listes d'un incident : il doit exister, ne pas être en corbeille
@@ -394,8 +393,8 @@ public sealed class IncidentRepository
     /// <summary>Convertit une ligne SQL (ordre des colonnes de PersonSelect) en objet Person.</summary>
     private static Person ReadPerson(SqliteDataReader r) => new(
         r.GetInt64(0), r.GetInt64(1), r.GetString(2), r.GetString(3),
-        NullableString(r, 4), NullableString(r, 5), NullableString(r, 6), NullableString(r, 7), NullableString(r, 8),
-        ParseDate(r.GetString(9)), r.GetString(10), NullableDate(r, 11), NullableString(r, 12));
+        NullableString(r, 4), NullableString(r, 5), NullableString(r, 6),
+        ParseDate(r.GetString(7)), r.GetString(8), NullableDate(r, 9), NullableString(r, 10));
 
     /// <summary>Supprime les espaces superflus ; une chaîne vide devient null (champ non renseigné).</summary>
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : string.Join(' ', s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

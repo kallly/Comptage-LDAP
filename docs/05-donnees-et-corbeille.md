@@ -34,8 +34,6 @@ erDiagram
         TEXT LastName "internes"
         TEXT FirstName "internes"
         TEXT Login "internes (sAMAccountName)"
-        TEXT Department "internes"
-        TEXT Company "visiteurs"
         TEXT AddedAt
         TEXT AddedBy
         TEXT RemovedAt "NULL = comptée, sinon retirée"
@@ -150,9 +148,10 @@ Garde-fous :
 
 ## Données personnelles
 
-L'application traite des données personnelles (nom, prénom, service, identifiant, présence lors d'un incident) :
+L'application traite des données personnelles (nom, prénom, identifiant Windows, présence lors d'un incident) :
 - **Finalité** : sécurité des personnes lors d'un incident.
-- **Minimisation** : seuls les attributs listés en [04](04-annuaire-ldap.md#ce-qui-est-lu) sont lus. L'adresse e-mail n'est pas stockée.
+- **Minimisation** : seuls les attributs listés en [04](04-annuaire-ldap.md#ce-qui-est-lu) sont lus. L'adresse e-mail n'est pas stockée. Ni le service des internes ni la société des visiteurs ne sont collectés.
+- **Migration** : les premières versions stockaient aussi ces deux informations. Au démarrage, une base existante est migrée automatiquement : les colonnes `Department` et `Company` sont **supprimées avec leur contenu**, et les personnes sont conservées (`Database.DropObsoleteColumns`, test `Migration_supprime_les_colonnes_service_et_societe_d_une_ancienne_base`).
 - **Durée de conservation** : les incidents sont conservés **jusqu'à leur suppression** par un utilisateur (puis 24 h en corbeille). Il n'y a pas d'effacement automatique des incidents clôturés. Définissez une politique (par exemple « supprimer les exercices après N mois ») et appliquez-la avec le bouton « Supprimer l'incident ».
 - **Accès** : utilisateurs authentifiés du domaine ([06](06-securite.md)).
 - Pensez à inscrire ce traitement au registre des traitements, selon votre organisation.

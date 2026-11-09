@@ -11,7 +11,7 @@ Prérequis : SDK .NET 10 (https://dotnet.microsoft.com/download/dotnet/10.0). Fo
 ```bash
 # À la racine du dépôt
 dotnet test
-# Résultat attendu :  Passed!  - Failed: 0, Passed: 76
+# Résultat attendu :  Passed!  - Failed: 0, Passed: 77
 ```
 
 Vérifier aussi l'absence de vulnérabilité connue dans les dépendances :
@@ -20,7 +20,7 @@ dotnet list package --vulnerable --include-transitive
 # Résultat attendu : "has no vulnerable packages"
 ```
 
-### Ce que couvrent les tests (76 cas)
+### Ce que couvrent les tests (77 cas)
 
 | Fichier | Test | Ce qui est démontré |
 |---|---|---|
@@ -35,7 +35,7 @@ dotnet list package --vulnerable --include-transitive
 | `NameRulesTests.cs` › `NameRulesTests` | `Les_noms_reels_sont_acceptes` (18 noms : français, allemand, nordique, polonais, tchèque, turc, roumain, espagnol, apostrophes `'` et `’`, traits d'union, noms composés) | **S20** : la liste blanche n'écarte pas de noms réels |
 | | `Les_autres_caracteres_sont_refuses` (16 saisies : `*`, `(`, `\`, chiffres, `<script>`, injection SQL, `=`, `@`, `"`, `;`, `_`, tabulation, `×`, `÷`, aucune lettre, vide) | S20 : tout le reste est refusé |
 | | `Un_accent_saisi_en_deux_caracteres_NFD_est_accepte` | Normalisation NFC |
-| `NameRulesTests.cs` › `NameRulesApiTests` | `La_recherche_annuaire_applique_la_liste_blanche`, `Le_nom_du_visiteur_applique_la_liste_blanche` | S20 appliquée par l'API (400 / 200 / 201) ; société libre (« 3M S.A. ») |
+| `NameRulesTests.cs` › `NameRulesApiTests` | `La_recherche_annuaire_applique_la_liste_blanche`, `Le_nom_du_visiteur_applique_la_liste_blanche` | S20 appliquée par l'API (400 / 200 / 201) |
 | `ApiTests.cs` *(API en mémoire, utilisateur simulé)* | `Requete_de_modification_sans_entete_csrf_est_refusee` | S5 : anti-CSRF |
 | | `Utilisateur_courant_est_renvoye` | L'identité vient de l'authentification |
 | | `Recherche_annuaire_exige_4_caracteres` (3 → 400, 4 → 200) | Règle des 4 caractères **côté serveur** |
@@ -51,6 +51,7 @@ dotnet list package --vulnerable --include-transitive
 | | `Incident_supprime_va_en_corbeille_et_se_restaure_pendant_24h` | R1 : corbeille ; à 23 h, purge sans effet et restauration possible |
 | | `Apres_24h_la_restauration_est_refusee_et_la_purge_supprime_definitivement` | R2 : à 24 h 01, restauration refusée, purge effective, personnes supprimées, autres incidents intacts |
 | | `Chaque_action_est_journalisee` | R5 : ordre et auteur des entrées du journal |
+| | `Migration_supprime_les_colonnes_service_et_societe_d_une_ancienne_base` | Une base créée par une version antérieure perd ses colonnes `Department` / `Company` (et leur contenu) ; personnes et unicité conservées ; migration rejouable sans effet |
 
 Ce que les tests **ne couvrent pas**, faute d'environnement Windows / AD : la recherche réelle dans Active Directory, Kerberos de bout en bout et IIS. Ces points se vérifient par la **recette sur site** ([07](07-installation-iis.md#vérifications-après-installation-recette)).
 
@@ -108,7 +109,7 @@ Pour chaque point : le fichier à ouvrir, ce qu'il faut y trouver et la conclusi
 |---|---|---|---|
 | D1 | Aucun identifiant stocké | `AdDirectoryService.cs` : `new DirectoryEntry()` ou `new DirectoryEntry(SearchRoot)`, sans nom ni mot de passe ; `rg -ni "password" src/` | Aucune occurrence |
 | D2 | Lecture seule | `AdDirectoryService.cs` : seulement `FindAll()` ; aucun `CommitChanges`, `Properties[…] =`, `Invoke` | Conforme |
-| D3 | Attributs lus limités | Constante `Properties` | 6 attributs listés en [04](04-annuaire-ldap.md#ce-qui-est-lu) |
+| D3 | Attributs lus limités | Constante `Properties` | 5 attributs listés en [04](04-annuaire-ldap.md#ce-qui-est-lu) (pas de `department`) |
 | D4 | Recherche bornée | `SizeLimit`, `ClientTimeout`, `ServerTimeLimit` | Présents |
 | D5 | Annuaire fictif impossible en production par défaut | `appsettings.json` : `"Provider": "ActiveDirectory"` ; `Program.cs` : refus de démarrer hors Windows | Conforme |
 

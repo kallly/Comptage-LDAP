@@ -17,7 +17,7 @@
 //  à configurer dans l'AD. Par défaut, tout compte du domaine (y compris un compte ordinateur) peut lire
 //  les attributs utilisés ici.
 //
-//  ATTRIBUTS LUS (lecture seule) : sAMAccountName, givenName, sn, displayName, department, mail.
+//  ATTRIBUTS LUS (lecture seule) : sAMAccountName, givenName, sn, displayName, mail.
 //  Aucun autre attribut n'est demandé ; rien n'est jamais écrit dans l'annuaire.
 //
 //  Détails : docs/04-annuaire-ldap.md
@@ -35,7 +35,7 @@ namespace ComptageIncident.Directory;
 public sealed class AdDirectoryService : IDirectoryService
 {
     /// <summary>Liste exhaustive des attributs demandés au contrôleur de domaine.</summary>
-    private static readonly string[] Properties = ["sAMAccountName", "givenName", "sn", "displayName", "department", "mail"];
+    private static readonly string[] Properties = ["sAMAccountName", "givenName", "sn", "displayName", "mail"];
 
     private readonly DirectoryOptions _options;
     private readonly ILogger<AdDirectoryService> _logger;
@@ -90,7 +90,7 @@ public sealed class AdDirectoryService : IDirectoryService
                 var display = Get(r, "displayName")
                               ?? string.Join(' ', new[] { last?.ToUpperInvariant(), first }.Where(s => !string.IsNullOrEmpty(s)));
                 results.Add(new DirectoryPerson(login, first, last, string.IsNullOrWhiteSpace(display) ? login : display,
-                    Get(r, "department"), Get(r, "mail")));
+                    Get(r, "mail")));
             }
         }
         catch (Exception ex)

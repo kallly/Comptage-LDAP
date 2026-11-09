@@ -20,7 +20,7 @@ public static class PersonKinds
     /// <summary>Personne interne, sélectionnée dans l'annuaire (possède un identifiant Windows « Login »).</summary>
     public const string Internal = "internal";
 
-    /// <summary>Visiteur ou personne hors annuaire, saisi manuellement (nom complet + société facultative).</summary>
+    /// <summary>Visiteur ou personne hors annuaire, saisi manuellement (nom complet uniquement).</summary>
     public const string Visitor = "visitor";
 }
 
@@ -72,8 +72,6 @@ public sealed record Person(
     string? LastName,
     string? FirstName,
     string? Login,
-    string? Department,
-    string? Company,
     DateTime AddedAt,
     string AddedBy,
     DateTime? RemovedAt,
@@ -83,10 +81,10 @@ public sealed record Person(
 public sealed record AuditEntry(long Id, long? IncidentId, DateTime At, string User, string Action, string? Details);
 
 /// <summary>Données nécessaires pour ajouter une personne interne (issues de la suggestion d'annuaire choisie).</summary>
-public sealed record NewInternalPerson(string Login, string? FirstName, string? LastName, string? DisplayName, string? Department);
+public sealed record NewInternalPerson(string Login, string? FirstName, string? LastName, string? DisplayName);
 
-/// <summary>Données saisies pour ajouter un visiteur.</summary>
-public sealed record NewVisitor(string FullName, string? Company);
+/// <summary>Données saisies pour ajouter un visiteur : son nom complet uniquement.</summary>
+public sealed record NewVisitor(string FullName);
 
 /// <summary>Issue d'une opération métier.</summary>
 public enum OpStatus

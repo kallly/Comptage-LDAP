@@ -104,8 +104,6 @@ public sealed class Database
                 LastName    TEXT,                   -- internes uniquement (attribut AD « sn »)
                 FirstName   TEXT,                   -- internes uniquement (attribut AD « givenName »)
                 Login       TEXT,                   -- internes uniquement (attribut AD « sAMAccountName »)
-                Department  TEXT,                   -- internes uniquement (attribut AD « department »)
-                Company     TEXT,                   -- visiteurs uniquement (saisie libre)
                 AddedAt     TEXT NOT NULL,
                 AddedBy     TEXT NOT NULL,
                 RemovedAt   TEXT,
@@ -134,5 +132,32 @@ public sealed class Database
             CREATE INDEX IF NOT EXISTS IX_AuditLog_Incident ON AuditLog(IncidentId);
             """;
         cmd.ExecuteNonQuery();
+
+        DropObsoleteColumns(conn);
+    }
+
+    /// <summary>
+    /// Migration : les premières versions stockaient aussi le service (Department) des internes et la société
+    /// (Company) des visiteurs. Ces informations ne sont plus collectées (minimisation des données) ; si une
+    /// base existante contient encore ces colonnes, elles sont SUPPRIMÉES avec leur contenu.
+    /// Idempotent : sans effet si les colonnes n'existent pas (nouvelle base ou migration déjà faite).
+    /// Seules ces deux colonnes, dont les noms sont fixés ici, peuvent être supprimées.
+    /// </summary>
+    private static void DropObsoleteColumns(SqliteConnection conn)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = conn.CreateCommand())
+        {
+            info.CommandText = "SELECT name FROM pragma_table_info('Persons')";
+            using var reader = info.ExecuteReader();
+            while (reader.Read()) existing.Add(reader.GetString(0));
+        }
+        foreach (var column in new[] { "Department", "Company" })
+        {
+            if (!existing.Contains(column)) continue;
+            using var drop = conn.CreateCommand();
+            drop.CommandText = $"ALTER TABLE Persons DROP COLUMN {column}"; // nom de colonne constant ci-dessus
+            drop.ExecuteNonQuery();
+        }
     }
 }
